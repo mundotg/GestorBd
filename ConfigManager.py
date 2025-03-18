@@ -1,6 +1,7 @@
 import json
 import threading
 from pathlib import Path
+import pandas as pd
 from typing import Dict, Any, Optional, List
 from logger import logger
 
@@ -10,13 +11,15 @@ class ConfigManager:
     
     _lock = threading.Lock()  # Lock para evitar condições de corrida
     
-    def __init__(self, config_path: str = "db_profiles.json") -> None:
+    def __init__(self, config_path: str = "db_profiles.json",base_path="tabela_salvas") -> None:
         """
         Inicializa o gerenciador de perfis de conexão.
 
         :param config_path: Caminho do arquivo de configuração (padrão: "db_profiles.json").
         """
         self.config_file = Path(config_path)
+        self.base_path = Path(base_path)
+        self.base_path.mkdir(parents=True, exist_ok=True)
         self.profiles: Dict[str, Dict[str, Any]] = self._load_profiles()
 
     def _load_profiles(self) -> Dict[str, Dict[str, Any]]:
@@ -70,19 +73,7 @@ class ConfigManager:
         else:
             logger.error(f"Falha ao salvar perfil '{name}'.")
         return result
-    def save_table(self, table_name: str, data: List[Dict[str, Any]]) -> bool:
-        """
-        Salva uma tabela carregada no arquivo JSON.
-        """
-        return self.save_profile(f"table_{table_name}", {"data": data})
-    
-
-    def get_table(self, table_name: str) -> Optional[List[Dict[str, Any]]]:
-        """
-        Obtém uma tabela carregada pelo nome.
-        """
-        profile = self.get_profile(f"table_{table_name}")
-        return profile.get("data") if profile else None
+   
 
     def delete_profile(self, name: str) -> bool:
         """
@@ -142,3 +133,68 @@ class ConfigManager:
             logger.error(f"Erro ao carregar último perfil: {e}")
         
         return ""
+    def save_table_to_excel(self, df: pd.DataFrame, table_name: str) -> bool:
+        """
+        Salva os dados de um DataFrame em um arquivo Excel.
+        :param df: DataFrame com os dados da tabela.
+        :param table_name: Nome da tabela para salvar.
+        :return: True se salvar com sucesso, False caso contrário.
+        """
+        try:
+            file_path = self.base_path / f"{table_name}.xlsx"
+            df.to_excel(file_path, index=False)
+            logger.info(f"Tabela '{table_name}' salva com sucesso em '{file_path}'.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao salvar tabela '{table_name}': {e}")
+            return False
+
+    def save_table_metadata(self, df: pd.DataFrame, table_name: str, current_profile: str) -> bool:
+        """
+        Salva os metadados da tabela em um arquivo JSON.
+
+        :param df: DataFrame contendo os dados.
+        :param table_name: Nome da tabela.
+        :param current_profile: Nome do perfil atual.
+        :return: True se salvar com sucesso, False caso contrário.
+        """
+        try:
+            metadata = {
+                "table_name": table_name,
+                "columns": list(df.columns),
+                "dtypes": df.dtypes.astype(str).to_dict()
+            }
+
+            profile_path = self.base_path / current_profile
+            profile_path.mkdir(parents=True, exist_ok=True)  # Garante que o diretório do perfil existe.
+
+            metadata_path = profile_path / f"{table_name}_metadata.json"
+            metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+
+            logger.info(f"Metadados da tabela '{table_name}' salvos com sucesso em '{metadata_path}'.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao salvar metadados da tabela '{table_name}': {e}")
+            return False
+
+    def load_table_metadata(self, table_name: str, current_profile: str) -> Optional[Dict[str, Any]]:
+        """
+        Carrega os metadados da tabela a partir do arquivo JSON.
+
+        :param table_name: Nome da tabela.
+        :param current_profile: Nome do perfil atual.
+        :return: Dicionário com os metadados ou None se não existir.
+        """
+        metadata_path = self.base_path / current_profile / f"{table_name}_metadata.json"
+
+        if not metadata_path.exists():
+            logger.warning(f"Metadados da tabela '{table_name}' não encontrados para o perfil '{current_profile}'.")
+            return None
+
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            logger.info(f"Metadados da tabela '{table_name}' carregados com sucesso.")
+            return metadata
+        except json.JSONDecodeError as e:
+            logger.error(f"Erro ao carregar metadados da tabela '{table_name}': {e}")
+            return None

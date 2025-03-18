@@ -2,7 +2,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from DatabaseManager import DatabaseManager,DatabaseUtils
-from logger import logger, log_message as logmessage
+from logger import log_message as logmessage
 from ConfigManager import ConfigManager
 from Theme import Theme
 
@@ -259,27 +259,58 @@ class DatabaseConnectorGUI:
                 self.log_message(f"Erro ao desconectar: {e}", "error")
             
     def open_gui_gestaodb(self):
-        """Abre a interface de gestão da base de dados."""
-        
-        print("tetgghsgbbhbhsbh")
+        """Abre uma nova interface de gestão da base de dados sem afetar a janela principal e herdando o tema."""
+
         if not self.connection:
             self.log_message("Nenhuma conexão ativa para gerenciamento da base de dados.", "warning")
             return
 
         self.log_message("Abrindo interface de gestão da base de dados...", "info")
-        
+
         try:
-            self.root.withdraw()  # Oculta a janela principal
-            #self.root.update()
-            from DatabaseGUI import open_gui_gestaodb
-            # from DatabaseGUI import ChatClientGUI
-            db_gui = open_gui_gestaodb(self.root, self.connection,self.engine, self.db_type.get(),self.current_profile,self.database_var,self.dark_mode,self.connection_status)
-            db_gui.root.protocol("WM_DELETE_WINDOW", self.on_close_gestaodb)
-            db_gui.root.mainloop()
-        
+            # Criar uma nova instância independente da interface
+            new_root = tk.Tk()
+            new_root.title("Gestão da Base de Dados")
+
+            # Aplicar tema herdado
+            if self.dark_mode.get() if hasattr(self.dark_mode, "get") else self.dark_mode:
+                new_root.configure(bg="#1e1e1e")  # Fundo escuro
+                fg_color = "white"
+            else:
+                new_root.configure(bg="white")  # Fundo claro
+                fg_color = "black"
+
+            # Criar um rótulo apenas para teste do tema herdado
+            label = tk.Label(new_root, text="Interface de Gestão da Base de Dados", bg=new_root["bg"], fg=fg_color, font=("Arial", 14))
+            label.pack(pady=20)
+
+            # Tentativa de importar DatabaseGUI
+            try:
+                from DatabaseGUI import DataAnalysisGUI
+            except ImportError as e:
+                self.log_message(f"Erro ao importar DatabaseGUI: {e}", "error")
+                new_root.destroy()  # Fecha a nova janela em caso de erro
+                return
+
+            # Obtém o valor correto do tipo de banco de dados
+            db_type_value = self.db_type.get() if hasattr(self.db_type, "get") else self.db_type
+
+            # Inicializa a nova interface de gestão do banco de dados
+            db_gui = DataAnalysisGUI(
+                new_root, self.connection, self.engine, db_type_value,
+                self.current_profile.get(),  # Certifica-se de que é uma string
+                self.database_var, self.dark_mode, self.connection_status, self.config_manager,self.log_message,self.root
+            )
+
+            db_gui.root.protocol("WM_DELETE_WINDOW", self.Quit)
+            new_root.mainloop()  # Mantém a nova janela ativa
+
         except Exception as e:
-            self.log_message(f"Erro ao abrir a interface de gestão: {e}", "error")
-            self.root.deiconify()  # Restaura a janela principal em caso de erro
+            import traceback
+            error_details = traceback.format_exc()
+            self.log_message(f"Erro ao abrir a interface de gestão: {e}\n{error_details}", "error")
+
+
 
     
     def test_connection(self):
