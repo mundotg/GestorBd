@@ -218,8 +218,8 @@ class DatabaseConnectorGUI:
             
             # Conectar
             self.connection,self.engine = DatabaseManager.connect(db_type, config)
-            print(self.connection)
-            print(self.engine)
+            # print(self.connection)
+            # print(self.engine)
             # Atualizar UI
             self.root.after(0, lambda: self._update_connection_status(True, f"Conectado ao {db_type} com sucesso!"))
             
