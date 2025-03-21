@@ -49,7 +49,7 @@ class DataFrameTable(ttk.Frame):
             log_message(self, "Estilos configurados.")
 
             self.treeview_frame = TreeViewFrame(self, self.df, self.column_width)
-            self.navigation_frame = NavigationFrame(self, self.prev_page, self.next_page, self.update_table)
+            self.navigation_frame = NavigationFrame(self, self.prev_page, self.next_page, self.update_table,self.df)
             log_message(self, "Componentes de interface criados.")
 
             self.update_table()
