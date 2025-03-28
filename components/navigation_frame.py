@@ -1,19 +1,24 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 import pandas as pd
 
+from components.Create_registro_Modal import CreateModal
 from components.analit_frame_table import AnalysisFrame 
 
 class NavigationFrame(ttk.Frame):
     """Creates a navigation frame with pagination controls."""
     
-    def __init__(self, master: Any, prev_page: Callable, next_page: Callable, update_table: Callable, df: pd.DataFrame):
+    def __init__(self, master: Any, prev_page: Callable, next_page: Callable, update_table: Callable, df: pd.DataFrame,engine: Any, table_name: str='',db_type:str ='PostgreSQL', on_data_change: Optional[Callable[[pd.DataFrame], None]] = None):
         super().__init__(master)
         self.prev_page = prev_page
         self.next_page = next_page
         self.update_table = update_table
         self.df = df  # Armazena o DataFrame
+        self.on_data_change = on_data_change
+        self.engine = engine
+        self.table_name = table_name
+        self.db_type = db_type
 
         self._create_widgets()
     
@@ -31,16 +36,17 @@ class NavigationFrame(ttk.Frame):
         self.refresh_button = ttk.Button(self, text='Refresh', command=self.update_table, style="DataTable.TButton")
         self.refresh_button.pack(side=tk.RIGHT, padx=5)
 
-        # Botão para ver registros duplicados
-        self.duplicates_button = ttk.Button(self, text="Ver Duplicados", command=self.show_duplicates, style="DataTable.TButton")
-        self.duplicates_button.pack(side=tk.RIGHT, padx=5)
+        
 
         # Botão para ver registros mal formados
-        self.invalid_button = ttk.Button(self, text="Ver Mal Formados", command=self.show_malformed_records, style="DataTable.TButton")
+        self.invalid_button = ttk.Button(self, text="criar novo registro", command=self.cria_regitro, style="DataTable.TButton")
         self.invalid_button.pack(side=tk.RIGHT, padx=5)
         self.analysis_button = ttk.Button(self, text="Analisar Tabela", command=self.open_analysis)
         self.analysis_button.pack(pady=5)
-    
+    def cria_regitro(self):
+        self.on_data_change(self.df)
+        CreateModal(master=self, engine=self.engine, table_name=self.table_name, on_data_change=self.on_data_change, db_type=self.db_type, df=self.df)
+        return
     def open_analysis(self):
         analysis_window = tk.Toplevel()
         analysis_window.title("Análise Detalhada")
@@ -66,19 +72,4 @@ class NavigationFrame(ttk.Frame):
             self.next_page()
         else:
             messagebox.showerror("Error", "Invalid next page function.")
-    
-    def show_duplicates(self):
-        """Finds and displays duplicate records."""
-        duplicates = self.df[self.df.duplicated(keep=False)]  # Mostra todos os duplicados
-        if duplicates.empty:
-            messagebox.showinfo("Registros Duplicados", "Nenhum registro duplicado encontrado.")
-        else:
-            messagebox.showinfo("Registros Duplicados", f"Registros duplicados encontrados:\n\n{duplicates}")
-
-    def show_malformed_records(self):
-        """Finds and displays malformed records (empty values)."""
-        malformed = self.df[self.df.isnull().any(axis=1)]  # Filtra registros com valores ausentes
-        if malformed.empty:
-            messagebox.showinfo("Registros Mal Formados", "Nenhum registro mal formado encontrado.")
-        else:
-            messagebox.showinfo("Registros Mal Formados", f"Registros mal formados encontrados:\n\n{malformed}")
+  

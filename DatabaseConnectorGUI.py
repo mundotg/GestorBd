@@ -1,9 +1,10 @@
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
+import traceback
 from DatabaseManager import DatabaseManager,DatabaseUtils
-from logger import log_message as logmessage
-from ConfigManager import ConfigManager
+from utils.logger import log_message as logmessage
+from config.ConfigManager import ConfigManager
 from Theme import Theme
 
 
@@ -302,7 +303,7 @@ class DatabaseConnectorGUI:
                 self.database_var, self.dark_mode, self.connection_status, self.config_manager,self.log_message,self.root
             )
 
-            db_gui.root.protocol("WM_DELETE_WINDOW", self.Quit)
+            #db_gui.root.protocol("WM_DELETE_WINDOW", self.Quit)
             new_root.mainloop()  # Mantém a nova janela ativa
 
         except Exception as e:
@@ -336,7 +337,7 @@ class DatabaseConnectorGUI:
                 self.log_message(f"Falha no teste de conexão com {db_type}.", "error")
                 messagebox.showerror("Teste de Conexão", f"Falha no teste de conexão com {db_type}.")
         except Exception as e:
-            self.log_message(f"Erro no teste de conexão: {e}", "error")
+            self.log_message(f"Erro no teste de conexão: {e}  ({type(e).__name__})\n{traceback.format_exc()}", "error")
             messagebox.showerror("Erro", f"Erro ao testar conexão: {e}")
     
     def save_profile(self):
@@ -349,16 +350,24 @@ class DatabaseConnectorGUI:
                 return
             self.current_profile.set(profile_name)
         
+        # config = {
+        #     "db_type": self.db_type.get(),
+        #     "host": self.host_var.get(),
+        #     "port": self.port_var.get(),
+        #     "user": self.user_var.get(),
+        #     "password": self.password_var.get(),
+        #     "database": self.database_var.get()
+        # }
         config = {
-            "db_type": self.db_type.get(),
+            "db_type": str(self.db_type.get()),  # Converter para string
             "host": self.host_var.get(),
-            "port": self.port_var.get(),
+            "port": str(self.port_var.get()),  # Garantir que seja string
             "user": self.user_var.get(),
             "password": self.password_var.get(),
             "database": self.database_var.get()
         }
-        
-        self.config_manager.save_profile(profile_name, config)
+        print(f'config = {config}')
+        self.config_manager.save_profile(name=profile_name, config=config)
         self.log_message(f"Perfil '{profile_name}' salvo com sucesso.", "success")
         
         # Atualizar lista de perfis no combobox

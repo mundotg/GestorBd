@@ -14,5 +14,13 @@
     "user": "postgres",
     "password": "1234",
     "database": "OrionForgeNexus"
+  },
+  "francyapp": {
+    "db_type": "PostgreSQL",
+    "host": "ep-sparkling-waterfall-a44lum50-pooler.us-east-1.aws.neon.tech",
+    "port": "5432",
+    "user": "default",
+    "password": "B7mIKbgpvxO8",
+    "database": "verceldb"
   }
 }

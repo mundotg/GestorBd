@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 import pandas as pd
 from typing import Dict, Any, Optional, List
-from logger import logger
+from utils.logger import logger
 
 
 class ConfigManager:
@@ -41,32 +41,39 @@ class ConfigManager:
 
     def _save_profiles(self) -> bool:
         """Salva os perfis no arquivo JSON de maneira segura."""
-        with self._lock:  # Garante que apenas uma thread escreve no arquivo por vez
-            try:
-                self.config_file.write_text(
-                    json.dumps(self.profiles, indent=2, ensure_ascii=False),
-                    encoding="utf-8"
-                )
-                return True
-            except OSError as e:
-                logger.exception(f"Erro ao salvar perfis: {e}")
-                return False
+        print(f"_save_profiles: ")
+        try:
+            self.config_file.write_text(
+                json.dumps(self.profiles, indent=2, ensure_ascii=False),
+                encoding="utf-8"
+            )
+            return True
+        except OSError as e:
+            logger.exception(f"Erro ao salvar perfis: {e}")
+            return False
 
     def save_profile(self, name: str, config: Dict[str, Any]) -> bool:
         """
         Salva um novo perfil de conexão ou atualiza um existente.
         Valida se os dados são serializáveis antes de salvar.
         """
-        try:
-            json.dumps(config)  # Testa se o dicionário é serializável
-        except TypeError as e:
-            logger.error(f"Configuração inválida para o perfil '{name}': {e}")
-            return False
+        for key, value in config.items():
+            print(key, value)
+            try:
+                json.dumps(value)
+            except TypeError as e:
+                print(f"Erro ao serializar a chave '{key}' com valor '{value}' (tipo: {type(value)})")
+                logger.error(f"Configuração inválida para o perfil '{name}': {e}")
+                return False
+        
 
         with self._lock:
+            print(f"Salvando perfil: {name}")
             logger.info(f"Salvando perfil: {name}")
             self.profiles[name] = config
+            print(f" self.profiles[name] = config")
             result = self._save_profiles()
+            print("result = self._save_profiles()")
         
         if result:
             logger.info(f"Perfil '{name}' salvo com sucesso.")

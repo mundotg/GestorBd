@@ -1,7 +1,7 @@
 from typing import Dict, Any
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from logger import logger
+from utils.logger import logger
 
 class DatabaseManager:
     """Gerencia a conexão com diferentes bancos de dados usando SQLAlchemy"""

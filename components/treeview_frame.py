@@ -1,79 +1,242 @@
 import tkinter as tk
 from tkinter import ttk
+import traceback
 import pandas as pd
 from typing import Any, Optional
 
 class TreeViewFrame(ttk.Frame):
-    """Creates a Treeview widget to display a pandas DataFrame."""
+    """Cria um Treeview para exibir um DataFrame do pandas com colunas responsivas."""
     
-    def __init__(self, master: Any, df: Optional[pd.DataFrame] = None, column_width: int = 100):
+    def __init__(self, master: Any, show_edit_modal: Any,log_message:Any, df: Optional[pd.DataFrame] = None, 
+                 column_width: int = 100, min_column_width: int = 50):
         super().__init__(master)
-        self.df = df.copy() if df is not None else pd.DataFrame()
+        self.df = df if df is not None else pd.DataFrame()
         self.column_width = column_width
+        self.min_column_width = min_column_width
+        self.show_edit_modal = show_edit_modal
+        self.log_message=log_message
+
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        self.resizing_column = None
+        self.resizing_x = 0
 
         self._create_widgets()
         self._setup_columns()
-        self._populate_table()
+        self.update_table(df, current_page=0, rows_per_page=0)
+        self._bind_events()
 
     def _create_widgets(self):
-        """Creates the Treeview and associated scrollbars."""
-        self.tree_scroll_y = ttk.Scrollbar(self, orient="vertical")
-        self.tree_scroll_x = ttk.Scrollbar(self, orient="horizontal")
+        """Cria o Treeview e os scrollbars."""
+        self.tree_frame = ttk.Frame(self)
+        self.tree_frame.grid(row=0, column=0, sticky="nsew")
+        self.tree_frame.rowconfigure(0, weight=1)
+        self.tree_frame.columnconfigure(0, weight=1)
+
+        self.tree_scroll_y = ttk.Scrollbar(self.tree_frame, orient="vertical", command=self.tree_yview)
+        self.tree_scroll_y.grid(row=0, column=1, sticky="ns")
+
+        self.tree_scroll_x = ttk.Scrollbar(self.tree_frame, orient="horizontal", command=self.tree_xview)
+        self.tree_scroll_x.grid(row=1, column=0, sticky="ew")
 
         self.tree = ttk.Treeview(
-            self,
+            self.tree_frame,
             columns=[],
             show='headings',
             yscrollcommand=self.tree_scroll_y.set,
             xscrollcommand=self.tree_scroll_x.set,
             style="DataTable.Treeview"
         )
+        self.tree.grid(row=0, column=0, sticky="nsew")
 
-        # Scrollbars
-        self.tree_scroll_y.config(command=self.tree.yview)
-        self.tree_scroll_x.config(command=self.tree.xview)
+    def tree_yview(self, *args):
+        """Vincula o scrollbar vertical ao Treeview."""
+        self.tree.yview(*args)
 
-        self.tree.pack(expand=True, fill='both')
-        self.tree_scroll_y.pack(side="right", fill="y")
-        self.tree_scroll_x.pack(side="bottom", fill="x")
+    def tree_xview(self, *args):
+        """Vincula o scrollbar horizontal ao Treeview."""
+        self.tree.xview(*args)
+
+    def _bind_events(self):
+        """Configura eventos do Treeview."""
+        self.tree.bind("<Double-1>", self._on_double_click)
+        self.tree.bind("<ButtonPress-1>", self._on_button_press)
+        self.tree.bind("<ButtonRelease-1>", self._on_button_release)
+        self.tree.bind("<B1-Motion>", self._on_motion)
+        self.bind("<Configure>", self._on_configure)
+
+    def _on_configure(self, event):
+        """Ajusta o tamanho das colunas proporcionalmente ao redimensionar o widget."""
+        if self.df.empty or event.width <= 1:
+            return
+
+        available_width = event.width - 20
+        columns = self.tree["columns"]
+        col_widths = [int(self.tree.column(col, "width")) for col in columns]
+
+        if sum(col_widths) > 0:
+            for i, col in enumerate(columns):
+                new_width = max(self.min_column_width, int((col_widths[i] / sum(col_widths)) * available_width))
+                self.tree.column(col, width=new_width)
+
+    def _on_double_click(self, event):
+        """Abre o modal de edição ao dar duplo clique em um item."""
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            item_id = self.tree.identify_row(event.y)
+            if item_id:
+                try:
+                    index = self.tree.index(item_id)  # Obtém o índice no TreeView
+                    self.log_message(self, f"Duplo clique detectado. ID: {item_id}, Índice no TreeView: {index}")
+                    self.show_edit_modal(index)  # Passa o índice correto
+                except Exception as e:
+                    self.log_message(self, f"Erro ao identificar índice no TreeView: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+
+    def _on_button_press(self, event):
+        """Inicia o redimensionamento de colunas."""
+        if self.tree.identify("region", event.x, event.y) == "separator":
+            self.resizing_column = self.tree.identify_column(event.x)
+            self.resizing_x = event.x
+
+    def _on_button_release(self, event):
+        """Finaliza o redimensionamento de colunas."""
+        self.resizing_column = None
+
+    def _on_motion(self, event):
+        """Redimensiona a coluna durante o movimento do mouse."""
+        if self.resizing_column:
+            delta_x = event.x - self.resizing_x
+            col_index = int(self.resizing_column.replace('#', '')) - 1
+            col_name = self.tree["columns"][col_index]
+            new_width = max(self.min_column_width, int(self.tree.column(col_name, "width")) + delta_x)
+            self.tree.column(col_name, width=new_width)
+            self.resizing_x = event.x
 
     def _setup_columns(self):
         """Configura as colunas do Treeview."""
         self.tree["columns"] = list(self.df.columns) if not self.df.empty else []
-
         for col in self.df.columns:
             self.tree.heading(col, text=col, anchor=tk.CENTER)
-            self.tree.column(col, width=self.column_width, anchor=tk.CENTER)
+            self.tree.column(col, width=self._calculate_column_width(col), anchor=tk.CENTER, minwidth=self.min_column_width)
 
-    def _populate_table(self):
-        """Popula a tabela com os dados atuais."""
-        for _, row in self.df.iterrows():
-            self.tree.insert("", "end", values=row.tolist())
+    def _calculate_column_width(self, column_name):
+        """Calcula a largura ideal de uma coluna."""
+        if self.df.empty:
+            return self.column_width
+        
+        sample = self.df.head(20)
+        max_data_length = sample[column_name].astype(str).str.len().max() * 8 if column_name in sample else 0
+        return max(len(str(column_name)) * 20, max_data_length, self.column_width)
 
     def update_table(self, df: pd.DataFrame, current_page: int, rows_per_page: int):
         """Atualiza a tabela com novos dados mantendo a paginação."""
-        self.df = df.copy()
+        self.df = df.copy() if df is not None else pd.DataFrame()
 
-        # Limpa os dados antigos
         for row in self.tree.get_children():
             self.tree.delete(row)
 
-        # Atualiza as colunas se necessário
         if list(self.tree["columns"]) != list(self.df.columns):
             self._setup_columns()
 
-        # Calcula o intervalo correto para exibir
         start_idx = current_page * rows_per_page
-        end_idx = start_idx + rows_per_page
-        paged_df = self.df.iloc[start_idx:end_idx]
+        end_idx = min(start_idx + rows_per_page, len(self.df))
+        paged_df = self.df.iloc[start_idx:end_idx] if rows_per_page > 0 else self.df
 
-        # Adiciona os novos dados
         for _, row in paged_df.iterrows():
             self.tree.insert("", "end", values=row.tolist())
 
-        
-        start = current_page * rows_per_page
-        end = min(start + rows_per_page, len(df))
-        
-        for _, row in df.iloc[start:end].iterrows():
-            self.tree.insert('', tk.END, values=row.tolist())
+    def get_selected_item(self):
+        """Retorna o índice do item selecionado."""
+        selection = self.tree.selection()
+        return self.tree.index(selection[0]) if selection else None
+
+    def select_item(self, index):
+        """Seleciona um item pelo índice."""
+        items = self.tree.get_children()
+        if 0 <= index < len(items):
+            item_id = items[index]
+            self.tree.selection_set(item_id)
+            self.tree.focus(item_id)
+            self.tree.see(item_id)
+
+
+""" 
+# Exemplo de uso:
+if __name__ == "__main__":
+    import numpy as np
+    
+    root = tk.Tk()
+    root.title("TreeView com Redimensionamento e Duplo Clique")
+    root.geometry("800x600")
+    
+    # Estilo personalizado para o treeview
+    style = ttk.Style()
+    style.configure("DataTable.Treeview", rowheight=25)
+    style.configure("DataTable.Treeview.Heading", font=("Arial", 10, "bold"))
+    
+    # Dados de exemplo
+    data = {
+        "ID": np.arange(1, 101),
+        "Nome": [f"Pessoa {i}" for i in range(1, 101)],
+        "Email": [f"pessoa{i}@exemplo.com" for i in range(1, 101)],
+        "Idade": np.random.randint(18, 80, 100),
+        "Salário": np.random.uniform(1000, 10000, 100).round(2),
+        "Departamento": np.random.choice(["RH", "TI", "Marketing", "Vendas", "Financeiro"], 100),
+        "Data Contratação": [f"{np.random.randint(1, 28)}/{np.random.randint(1, 13)}/{np.random.randint(2010, 2023)}" for _ in range(100)]
+    }
+    df = pd.DataFrame(data)
+    
+    def show_edit_modal(index):
+        #Função de exemplo para exibir modal de edição.
+        if index is not None:
+            item_data = df.iloc[index]
+            top = tk.Toplevel(root)
+            top.title(f"Editar Registro #{item_data['ID']}")
+            top.geometry("400x300")
+            top.transient(root)
+            top.grab_set()
+            
+            # Criar um label com as informações
+            info_text = "\n".join([f"{col}: {value}" for col, value in item_data.items()])
+            lbl = ttk.Label(top, text=info_text, justify="left")
+            lbl.pack(padx=20, pady=20)
+            
+            # Botão de fechar
+            ttk.Button(top, text="Fechar", command=top.destroy).pack(pady=10)
+    
+    # Adicionar o frame à janela principal
+    frame = ttk.Frame(root)
+    frame.pack(fill="both", expand=True, padx=10, pady=10)
+    
+    # Instanciar o TreeViewFrame
+    current_page = 0
+    rows_per_page = 10
+    tree_frame = TreeViewFrame(frame, show_edit_modal, df, column_width=120)
+    tree_frame.pack(fill="both", expand=True)
+    
+    # Atualizar tabela com paginação
+    tree_frame.update_table(df, current_page, rows_per_page)
+    
+    # Adicionar controles de paginação
+    pagination_frame = ttk.Frame(root)
+    pagination_frame.pack(fill="x", padx=10, pady=5)
+    
+    def update_page(delta):
+        nonlocal current_page
+        new_page = current_page + delta
+        if 0 <= new_page * rows_per_page < len(df):
+            current_page = new_page
+            tree_frame.update_table(df, current_page, rows_per_page)
+            page_label.config(text=f"Página {current_page + 1} de {(len(df) - 1) // rows_per_page + 1}")
+    
+    prev_btn = ttk.Button(pagination_frame, text="Anterior", command=lambda: update_page(-1))
+    prev_btn.pack(side="left", padx=5)
+    
+    page_label = ttk.Label(pagination_frame, text=f"Página {current_page + 1} de {(len(df) - 1) // rows_per_page + 1}")
+    page_label.pack(side="left", padx=10)
+    
+    next_btn = ttk.Button(pagination_frame, text="Próximo", command=lambda: update_page(1))
+    next_btn.pack(side="left", padx=5)
+    
+    root.mainloop() """
