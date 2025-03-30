@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+import traceback
 from tkcalendar import DateEntry
 from datetime import datetime
 from components.Time_picker import TimePicker
@@ -17,25 +18,34 @@ class DateTimeEntry(ttk.Frame):
     def __init__(self, parent, data_type="datetime"):
         super().__init__(parent)
         self.data_type = data_type.lower()  # Converte para minúsculas para evitar erros
-
+        print("tipo: ",data_type)
         # Entry principal (invisível)
-        self.entry = ttk.Entry(self, width=10 if data_type != "date" else 16, state="readonly")
+        self.frame_date = ttk.LabelFrame(self, text="data")
+        width = 10 if data_type == "date" else 18
+        self.entry = ttk.Entry(self.frame_date, width=width, state="normal")
         self.entry.grid(row=0, column=0, columnspan=1, padx=2, pady=5)
         # self.entry.grid_remove()  # 🔥 Esconde o campo
 
         # DateEntry (Calendário)
-        self.date_entry = DateEntry(self, width=1, background='darkblue', foreground='white', borderwidth=2)
+        self.date_entry = DateEntry(self.frame_date, width=1, background='darkblue', foreground='white', borderwidth=2)
         self.date_entry.grid(row=0, column=1, padx=1, pady=5)
         self.date_entry.lower(self.entry) 
-        # time_picker para horário (HH:MM)
-        self.time_entry = TimePicker(self)
+        self.frame_date.grid(row=0, column=0, padx=5, pady=1, sticky="ew")
+        # Criando um LabelFrame para agrupar o TimePicker
+        self.frame_time = ttk.LabelFrame(self, text="Horário")
+        # Centralizando o TimePicker dentro do LabelFrame
+        self.time_entry = TimePicker(self.frame_time)
+        self.time_entry.pack(padx=1, pady=1)
+        # Adicionando o LabelFrame à interface
+        self.frame_time.grid(row=0, column=3, padx=5, pady=1, sticky="ew")
         
 
         # Oculta os elementos se o tipo for apenas "time"
         if self.data_type == "time":
             self.date_entry.grid_remove()
             self.entry.grid_remove()
-        elif self.data_type == "date":
+        elif self.data_type == "date" and self.data_type != "timestamp" :
+            print("not time")
             self.time_entry.grid_remove()
 
         # Eventos para atualizar o Entry principal
@@ -71,48 +81,56 @@ class DateTimeEntry(ttk.Frame):
 
             else:  # Para datetime e timestamp
                 if date and time:  
-                    formatted_date = datetime.strptime(f"{date} {time}", "%m/%d/%y %H:%M").strftime(date_format)
+                    try:
+                        formatted_date = datetime.strptime(f"{date} {time}", "%m/%d/%y %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        # Caso a string não tenha segundos, tenta sem %S
+                        formatted_date = datetime.strptime(f"{date} {time}", "%m/%d/%y %H:%M").strftime("%Y-%m-%d %H:%M")
+
                 elif date:  # Se não houver tempo, assume "00:00"
                     formatted_date = datetime.strptime(f"{date} 00:00", "%m/%d/%y %H:%M").strftime(date_format)
                 else:
                     formatted_date = ""  # Ou definir um valor padrão
 
         except ValueError as e:
-            print(f"Erro ao formatar data/hora: {e}")
+            print(f"Erro ao formatar data/hora: {e} {traceback.format_exc()}")
             formatted_date = ""  # Define como vazio para evitar erro
 
         # Atualiza o Entry apenas se formatted_date estiver definido
-        self.entry.config(state="normal")
         self.entry.delete(0, tk.END)
         self.entry.insert(0, formatted_date if formatted_date else "Erro no formato")
-        self.entry.config(state="readonly")  # Bloqueia edição manual
 
 
     def get_entry(self):
         """Retorna o valor atual do Entry formatado."""
         return self.entry.get()
 
+  
+
     def set_date(self, date: str, time: str = "00:00"):
         """Define uma data e hora no widget, forçando um valor válido."""
         try:
-            if self.data_type != "time":
-                if date != "" or date != None: 
-                    self.date_entry.set_date(datetime.strptime(date, "%Y-%m-%d"))
-            
-            # Tenta validar o formato da hora, senão força "00:00"
-            try:
-                datetime.strptime(time, "%H:%M")  # Verifica se o formato é HH:MM
-            except ValueError:
-                print(f"Formato inválido '{time}', ajustando para '00:00'")
-                time = "00:00"
-            
-            self.time_entry.set_time(time)
+            if self.data_type in DATA_TYPE_FORMATS:  # Garante que o tipo é válido
+                format_str = DATA_TYPE_FORMATS[self.data_type]  # Obtém o formato correto
+                
+                # Remover fuso horário caso exista
+                date = date.split("+")[0]  # Remove "+00:00" ou outro fuso
+                
+                if self.data_type in ["datetime", "timestamp", "date"] and date:
+                    self.date_entry.set_date(datetime.strptime(date.split(" ")[0], "%Y-%m-%d"))  # Pega só a data
+
+                if self.data_type in ["datetime", "timestamp", "time"]:
+                    time_clean = time.split(" ")[-1][:8]  # Mantém apenas HH:MM:SS
+                    datetime.strptime(time_clean, "%H:%M:%S")  # Valida o formato
+                    self.time_entry.set_time(time_clean)
+
             self.update_entry()
-    
+
         except ValueError as e:
             error_message = f"Erro ao definir data/hora: {date} {time}. Detalhes: {e}"
             print(error_message)
             log_message(self, error_message, level="error")
+
 
 
     def show_entry(self):

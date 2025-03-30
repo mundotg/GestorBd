@@ -1,11 +1,11 @@
 from tkinter import messagebox
 import traceback
 from typing import Any
+from components.CheckboxWithEntry import CheckboxWithEntry
 from sqlalchemy import inspect, text
 import tkinter as tk
 from tkinter import ttk
 from components.Data_wiget2 import DateTimeEntry
-from config.DatabaseLoader import get_filter_condition
 from components.DataWidget import DatabaseDateWidget
 from utils.validarText import _fetch_enum_values, validar_numero_float, validar_numero_inteiro
 
@@ -99,8 +99,10 @@ class FilterContainer(ttk.LabelFrame):
             return
         for col_name, widget in self.column_filters.items():
             # Limpar o widget baseado em seu tipo
+            # print(f"name {col_name} valor {widget}")
             if isinstance(widget, ttk.Entry):
-                widget.delete(0, tk.END)
+                widget.config(state="normal")
+                widget.delete(0, tk.END) 
             elif isinstance(widget, ttk.Combobox):
                 if widget['values']:
                     widget.set(widget['values'][0])  # Resetar para o primeiro valor
@@ -148,7 +150,6 @@ class FilterContainer(ttk.LabelFrame):
             self.column_filters = {}
             _fetch_enum_values(self=self, columns=columns, text=text, traceback=traceback)
             
-            # Configurar o cabeçalho
             headers = ["Coluna", "Tipo", "Filtro"]
             for col, header in enumerate(headers):
                 ttk.Label(self.scrollable_frame, text=header, font=("", 9, "bold")).grid(row=0, column=col, sticky=tk.W, padx=5, pady=5)
@@ -157,16 +158,18 @@ class FilterContainer(ttk.LabelFrame):
             
             for i, col in enumerate(columns, start=2):
                 col_name, col_type = col["name"], str(col["type"]).lower()
-                ttk.Label(self.scrollable_frame, text=col_name).grid(row=i, column=0, sticky=tk.W, padx=5, pady=3)
-                
-                if "(" in col_type and ")" in col_type:
-                    col_value = col_type.split("(")[0].split(")")[0].lower()
+                if " " in col_type:
+                    col_value1 = col_type.split(" ")[0].lower()
                 else:
-                    col_value = col_type.lower()  # Usa o próprio col_type se não houver parênteses
-                
-                ttk.Label(self.scrollable_frame, text=col_value).grid(row=i, column=1, sticky=tk.W, padx=5, pady=3)
+                    col_value1 = col_type.lower()
+                # if "(" in col_type and ")" in col_type:
+                #     col_value = col_type.split("(")[0].split(")")[0].lower()
+                # else:
+                #     col_value = col_type.lower()  # Usa o próprio col_type se não houver parênteses
+                ttk.Label(self.scrollable_frame, text=col_name).grid(row=i, column=0, sticky=tk.W, padx=5, pady=3)
+                ttk.Label(self.scrollable_frame, text=col_value1).grid(row=i, column=1, sticky=tk.W, padx=5, pady=3)
                 self._add_filter_widget(col, col_type, i)
-        
+            
             self.status_var.set(f"Colunas carregadas para tabela: {table_name}")
         except Exception as e:
             self.log_message(f"Erro ao carregar colunas: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
@@ -191,8 +194,11 @@ class FilterContainer(ttk.LabelFrame):
             entry = ttk.Entry(self.scrollable_frame, validate="key", validatecommand=(vcmd, "%P"))
         
         elif "bool" in col_type or col_type in ["bit", "boolean"]:
-            var = tk.BooleanVar(value=False)
-            entry = ttk.Checkbutton(self.scrollable_frame, variable=var)
+            no_data = False
+            # var = tk.BooleanVar(value=False)
+            entry = CheckboxWithEntry(self.scrollable_frame)
+            entry.grid(row=row, column=2, sticky=tk.EW, padx=5, pady=3)
+            entry = entry.entry
         
         elif "date" in col_type or "timestamp" in col_type or "time" in col_type:
             try:
@@ -215,3 +221,4 @@ class FilterContainer(ttk.LabelFrame):
     def on_date_change(self,selected_data):
         """Simple callback to handle date changes."""
         print(f"Date changed: {selected_data}")
+        

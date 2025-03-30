@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
+from components.CheckboxWithEntry import CheckboxWithEntry
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Any, Callable, Optional, Dict, Union, List, TypedDict
@@ -60,10 +61,10 @@ class EditModal(tk.Toplevel):
         self.field_entries: Dict[str, Union[ttk.Entry, ttk.Combobox, tk.BooleanVar, DatabaseDateWidget]] = {}
         self.enum_values = enum_values or {}
         self.style = ttk.Style()
-        self.style.configure(style="TFrame", background="#f0f0f0")
-        self.style.configure(style="TLabel", background="#f0f0f0", font=("Arial", 10))
-        self.style.configure(style="TButton", font=("Arial", 10))
-        self.style.configure(style="Disabled.TEntry", foreground="#FFFFFF", fieldbackground="#0000FF",)
+        self.style.configure("TFrame", background="#f0f0f0")
+        self.style.configure("TLabel", background="#f0f0f0", font=("Arial", 10))
+        self.style.configure("TButton", font=("Arial", 10))
+        self.style.configure("Disabled.TEntry", foreground="#FFFFFF", fieldbackground="#0000FF")
         
         self._setup_window()
         self._create_widgets()
@@ -126,15 +127,22 @@ class EditModal(tk.Toplevel):
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # Button configuration
-        save_button = ttk.Button(
+        self.save_button = ttk.Button(
             button_frame, 
-            text="Salvar", 
+            text="✏Salvar", 
             command=self._save_changes,
             state="normal" if self.edit_enabled else "disabled"
         )
-        save_button.pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(button_frame, text="Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
+        self.save_button.pack(side=tk.LEFT, padx=5)
+        self.delete_button = ttk.Button(
+            button_frame, 
+            text="🗑 Apagar", 
+            command=self._delete_record,
+            state="normal" if self.edit_enabled else "disabled"
+        )
+        self.delete_button.pack(side=tk.LEFT, padx=5)
+                
+        ttk.Button(button_frame, text=" ❌Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
         
         # Make sure canvas adjusts to window size
         self.fields_frame.bind("<Configure>", lambda e: self._adjust_canvas_scrollregion(canvas))
@@ -145,9 +153,8 @@ class EditModal(tk.Toplevel):
         
         # Create the fields
         self._create_fields()
-        self.fields_frame.update_idletasks()
         self._adjust_canvas_scrollregion(canvas)
-
+        self.fields_frame.update_idletasks()
     def _adjust_canvas_scrollregion(self, canvas):
         """Adjust the canvas scroll region to encompass all content."""
         canvas.configure(scrollregion=canvas.bbox("all"))
@@ -253,9 +260,13 @@ class EditModal(tk.Toplevel):
 
             elif "bool" in col_type or col_type in ["bit", "boolean"]:
                 var = tk.BooleanVar(value=bool(value))
-                widget = ttk.Checkbutton(self.fields_frame, variable=var, state=state)
+                no_data = False
+                # var = tk.BooleanVar(value=False)
+                entry = CheckboxWithEntry(self.scrollable_frame,entry_value=value)
+                entry.grid(row=row, column=2, sticky=tk.EW, padx=5, pady=3)
+                entry = entry.entry
 
-            elif "date" in col_type or "timestamp" in col_type or "time" in col_type:
+            elif "date" in col_type or "timestamp" in col_type or "time" in col_type or "datatime" in col_type:
                 try:
                     entry = DateTimeEntry(self.fields_frame,col_type)
                     entry.set_date(date=str_value,time=str_value)
@@ -320,6 +331,7 @@ class EditModal(tk.Toplevel):
     def _save_changes(self):
         """Função genérica para salvar alterações em qualquer banco de dados."""
         try:
+            self.save_button.config(state="disabled")
             errors = self._validate_fields()
             if errors:
                 messagebox.showerror("Validação", "\n".join(errors))
@@ -327,31 +339,70 @@ class EditModal(tk.Toplevel):
             
             updated_values ={} 
             for col_name, entry in self.field_entries.items():
-                updated_values[col_name] = get_valor_idependente_entry(entry,tk,ttk)  
+                updated_values[col_name] = get_valor_idependente_entry(entry, tk, ttk)  
             updated_values[self.primary_key] = self.record_id  
-                 
+                
             query = self.build_update_query(self.table_name, updated_values, self.primary_key)
             if query is None:
                 messagebox.showinfo("Sem alterações", "Nenhuma alteração foi detectada.")
                 self.log_message("Nenhuma alteração foi detectada.", level="info")
                 return
             
+            confirm = messagebox.askyesno("Confirmação", "Tem certeza que deseja salvar as alterações?")
+            if not confirm:
+                return
+            
             with self.engine.begin() as conn:
                 conn.execute(query, updated_values)
             
             self.log_message(f"Registro {self.record_id} atualizado com sucesso!", level="info")
-            
+            df = self.df.copy()
             for col, value in updated_values.items():
-                if col in self.df.columns:
-                    self.df.at[self.row_index, col] = value
+                if col in df.columns:
+                    df.at[self.row_index, col] = value
             
             if self.on_data_change:
-                self.on_data_change(self.df)
+                self.on_data_change(df)
             
             messagebox.showinfo("Sucesso", "Registro atualizado com sucesso!")
         except SQLAlchemyError as e:
             self.log_message(f"Erro SQL ao atualizar o registro:{e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
             messagebox.showerror("Erro de Banco de Dados", f"Falha ao salvar as alterações: {str(e)}")
+        except Exception as es:
+            self.log_message(f"Erro ao atualizar o registro:{es} ({type(es).__name__})\n{traceback.format_exc()}", level="error")
+            messagebox.showerror("Erro", f"Falha ao salvar as alterações: {str(es)}")
+        self.save_button.config(state="normal")
+            
+    def _delete_record(self):
+        """Função para deletar um registro do banco de dados."""
+        resposta =""
+        try:
+            confirm = messagebox.askyesno("Confirmação", "Tem certeza que deseja excluir este registro?")
+            if not confirm:
+                return
+            self.delete_button.config(state="disabled")
+            query = text(f"DELETE FROM {self.table_name} WHERE {self.name_campo_primary_key} = :primary_key")
+            params = {"primary_key": self.primary_key}
+            
+            with self.engine.begin() as conn:
+                conn.execute(query, params)
+            
+            self.log_message(f"Registro {self.primary_key} deletado com sucesso!", level="info")
+            resposta =messagebox.showinfo("Sucesso", "Registro deletado com sucesso!")
+            df = self.df.copy()
+            df = df[df[self.name_campo_primary_key] != self.primary_key]
+        
+            if self.on_data_change:
+                self.on_data_change(df)
+            
+        except SQLAlchemyError as es:
+            self.log_message(f"Erro SQL ao deletar o registro: {es} ({type(es).__name__})\n{traceback.format_exc()}", level="error")
+            messagebox.showerror("Erro de Banco de Dados", f"Falha ao deletar o registro: {str(es)}")
         except Exception as e:
-            self.log_message(f"Erro ao atualizar o registro:{e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
-            messagebox.showerror("Erro", f"Falha ao salvar as alterações: {str(e)}")
+            self.log_message(f"Erro ao deletar o registro: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+            messagebox.showerror("Erro", f"Falha ao deletar o registro: {str(e)}")
+        self.delete_button.config(state="normal")
+        if resposta.lower() == "ok":
+            print("fechar")
+            self.destroy()
+

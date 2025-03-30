@@ -1,5 +1,9 @@
-1 - estou a resolver o problema de duplo click e e ajustar como  usar o metodo.
-2 - criar a modar criar registo.
-3 - pedir na ai para melhorar a modal editar que usa o engine para poder editar o dados na base de dados e ajustar o layout atravez da atravez da tabela 
-4 - modal DataBasegui botão pra fechar
-5 - botão ajudar
+1 - estou a resolver o problema de duplo click e e ajustar como  usar o metodo. R: feito V
+2 - criar a modar criar registo. R: feito V
+3 - pedir na ai para melhorar a modal editar que usa o engine para poder editar o dados na base de dados e ajustar o layout atravez da atravez da tabela R: feito V
+4 - modal DataBasegui botão pra fechar R: feito V
+5 - botão ajudar R: faltando X
+
+6 - cria e editar tem estar a funcionar
+7 - filtro de coluna a mostrar na tabela ex. select coluna_name,* from name_tabela;
+8 - sql avançado

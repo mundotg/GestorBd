@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
+from components.CheckboxWithEntry import CheckboxWithEntry
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Any, Callable, Optional, Dict, Union, List, TypedDict
@@ -115,19 +116,19 @@ class CreateModal(tk.Toplevel):
         # Button configuration
         save_button = ttk.Button(
             button_frame, 
-            text="Salvar", 
+            text="💾Salvar", 
             command=self._save_record
         )
         save_button.pack(side=tk.LEFT, padx=5)
         
         clear_button = ttk.Button(
             button_frame,
-            text="Limpar",
+            text="🗑Limpar",
             command=self._clear_fields
         )
         clear_button.pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(button_frame, text="Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="❌Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
         
         # Make sure canvas adjusts to window size
         self.fields_frame.bind("<Configure>", lambda e: self._adjust_canvas_scrollregion(canvas))
@@ -266,8 +267,12 @@ class CreateModal(tk.Toplevel):
                     widget.insert(0, str_value)
             
             elif "bool" in col_type or col_type in ["bit", "boolean"]:
-                var = tk.BooleanVar(value=bool(default_value) if default_value is not None else False)
-                widget = ttk.Checkbutton(self.fields_frame, variable=var)
+                
+                no_data = False
+                # var = tk.BooleanVar(value=False)
+                entry = CheckboxWithEntry(self.fields_frame)
+                entry.grid(row=row, column=2, sticky=tk.EW, padx=5, pady=3)
+                entry = entry.entry
             
             elif "date" in col_type or "timestamp" in col_type  or "time" in col_type:
                 try:

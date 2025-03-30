@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import TclError, ttk, messagebox
 from typing import Any, Callable, Optional
 import pandas as pd
 
@@ -19,30 +19,33 @@ class NavigationFrame(ttk.Frame):
         self.engine = engine
         self.table_name = table_name
         self.db_type = db_type
+        self.root = master
 
         self._create_widgets()
     
     def _create_widgets(self):
         """Creates navigation buttons with validation."""
-        self.prev_button = ttk.Button(self, text='Previous', command=self._validate_prev_page, style="DataTable.TButton")
+        self.total_label = ttk.LabelFrame(self,text=f"total de registro nº {len(self.df) if self.df is not None else 0}")
+        self.prev_button = ttk.Button(self.total_label, text='⬅️anterior', command=self._validate_prev_page, style="DataTable.TButton")
         self.prev_button.pack(side=tk.LEFT, padx=5)
         
-        self.page_label = ttk.Label(self, text="Page 1 of 1", font=("Arial", 10))
+        self.page_label = ttk.Label(self.total_label, text="📄Pag 1 of 1", font=("Arial", 10))
         self.page_label.pack(side=tk.LEFT, padx=5)
         
-        self.next_button = ttk.Button(self, text='Next', command=self._validate_next_page, style="DataTable.TButton")
+        self.next_button = ttk.Button(self.total_label, text='➡️proximo', command=self._validate_next_page, style="DataTable.TButton")
         self.next_button.pack(side=tk.LEFT, padx=5)
         
-        self.refresh_button = ttk.Button(self, text='Refresh', command=self.update_table, style="DataTable.TButton")
+        self.refresh_button = ttk.Button(self.total_label, text='🔄refrescar', command=self.update_table, style="DataTable.TButton")
         self.refresh_button.pack(side=tk.RIGHT, padx=5)
-
+        self.total_label.pack(side=tk.LEFT,fill=tk.X, pady=5)
         
-
+        self.gestao_label = ttk.LabelFrame(self,text=f"__________ gestão de tabela______")
         # Botão para ver registros mal formados
-        self.invalid_button = ttk.Button(self, text="criar novo registro", command=self.cria_regitro, style="DataTable.TButton")
+        self.invalid_button = ttk.Button(self.gestao_label, text="criar novo registro", command=self.cria_regitro, style="DataTable.TButton")
         self.invalid_button.pack(side=tk.RIGHT, padx=5)
-        self.analysis_button = ttk.Button(self, text="Analisar Tabela", command=self.open_analysis)
-        self.analysis_button.pack(pady=5)
+        self.analysis_button = ttk.Button(self.gestao_label, text="Analisar Tabela", command=self.open_analysis)
+        self.analysis_button.pack(side=tk.RIGHT,pady=5,padx=5)
+        self.gestao_label.pack(side=tk.RIGHT,fill=tk.X, pady=5)
     def cria_regitro(self):
         self.on_data_change(self.df)
         CreateModal(master=self, engine=self.engine, table_name=self.table_name, on_data_change=self.on_data_change, db_type=self.db_type, df=self.df)
@@ -55,9 +58,21 @@ class NavigationFrame(ttk.Frame):
 
     def update_pagination(self, current_page: int, total_pages: int):
         """Updates the page label and button states."""
-        self.page_label.config(text=f'Page {current_page + 1} of {total_pages}')
-        self.prev_button.config(state=tk.NORMAL if current_page > 0 else tk.DISABLED)
-        self.next_button.config(state=tk.NORMAL if current_page < total_pages - 1 else tk.DISABLED)
+        try:
+            if self.page_label.winfo_ismapped():
+                self.page_label.config(text=f'📄Page {current_page + 1} of {total_pages}')
+                self.prev_button.config(state=tk.NORMAL if current_page > 0 else tk.DISABLED)
+                self.next_button.config(state=tk.NORMAL if current_page < total_pages - 1 else tk.DISABLED)
+                self.total_label.config(text=f"total de registro nº {len(self.df) if self.df is not None else 0}")
+                
+        except TclError as e:
+            print("Tentativa de atualizar um widget que foi destruído.",e)
+            
+            self.is_destroyed = True  # Marca que a interface foi destruída
+            self.destroy()  # Fecha a janela principal
+            self.root.destroy()
+            self.quit()
+        
     
     def _validate_prev_page(self):
         """Validates and navigates to the previous page."""

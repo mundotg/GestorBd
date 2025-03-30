@@ -30,6 +30,7 @@ class DataAnalysisGUI:
 
         self.log_message("Iniciando a interface gráfica de análise de dados.")
         self.setup_ui()
+        self.root.protocol("WM_DELETE_WINDOW", self._close_app)
 
     def setup_ui(self):
         """Configura a interface gráfica."""
@@ -70,3 +71,21 @@ class DataAnalysisGUI:
         self.status_bar = StatusBar(self.root, self.log_message,self.engine,type_db=self.db_type)
 
         self.log_message("Interface gráfica configurada com sucesso.")
+        
+    def _close_app(self):
+        """Fecha a aplicação corretamente, liberando recursos."""
+        self.log_message("Encerrando a aplicação...")
+        self.basic_tab.frame.destroy()
+        self.advanced_tab.frame.destroy()
+        self.saved_tab.frame.destroy()
+        # Fechar conexão com o banco de dados, se existir
+        if self.connection:
+            try:
+                self.connection.close()
+                self.log_message("Conexão com o banco de dados fechada.")
+            except Exception as e:
+                self.log_message(f"Erro ao fechar a conexão: {str(e)}")
+        
+
+        # Destruir a janela principal
+        self.root.destroy()

@@ -93,7 +93,6 @@ def get_valor_idependente_entry(entry, tk, ttk):
     """Retorna o valor de um widget, independente do seu tipo."""
     
     if isinstance(entry, (tk.Entry, ttk.Combobox, ttk.Spinbox)):
-        print("textCom:", entry)
         return entry.get().strip()
 
     elif isinstance(entry,( tk.Checkbutton,ttk.Checkbutton)):
@@ -101,15 +100,97 @@ def get_valor_idependente_entry(entry, tk, ttk):
         if var_name:
             try:
                 var_widget = entry.master.nametowidget(var_name)
-                print("checkbox:", str(var_widget.get()).strip())
                 return str(var_widget.get()).strip()
             except Exception as e:
                 print("Erro ao acessar variável do Checkbutton:", e)
                 return ""
 
     elif isinstance(entry, tk.Text):
-        print("textArea:", entry)
         return entry.get("1.0", tk.END).rstrip("\n").strip()
-
-    print("nada:", entry)
     return ""
+
+def get_query_string(base_query, filters=None, max_rows=1000, db_type="mysql", offset=None) -> str:
+    """
+    Gera uma query SQL ajustada para diferentes bancos de dados, incluindo filtros, limite e paginação.
+    
+    Args:
+        base_query (str): Query base (ex: 'SELECT * FROM tabela').
+        filters (list, optional): Lista de condições de filtro. Exemplo: ["idade > 30", "cidade = 'SP'"].
+        max_rows (int): Número máximo de linhas a serem retornadas.
+        db_type (str): Tipo de banco de dados ('mysql', 'sqlite', 'postgresql', 'mssql', 'oracle').
+        offset (int, optional): Número de linhas a serem ignoradas para paginação.
+
+    Returns:
+        str: Query SQL final formatada.
+    """
+    query_string = base_query
+
+    # Adiciona filtros, se houver
+    if filters:
+        query_string += f" WHERE {' AND '.join(filters)}"
+
+    # Ajusta o limite e offset conforme o tipo de banco de dados
+    if db_type in ["mysql", "sqlite", "postgresql"]:
+        query_string += f" LIMIT {max_rows}"
+        if offset is not None:
+            query_string += f" OFFSET {offset}"
+
+    elif db_type in ["mssql", "SQL Server"]:  # Microsoft SQL Server
+        query_string = f"{query_string} ORDER BY (SELECT NULL) OFFSET {offset or 0} ROWS FETCH NEXT {max_rows} ROWS ONLY"
+
+    elif db_type == "oracle":
+        if offset is not None:
+            query_string = f"""
+                SELECT * FROM (
+                    SELECT a.*, ROWNUM rnum FROM ({query_string}) a 
+                    WHERE ROWNUM <= {offset + max_rows}
+                ) WHERE rnum > {offset}
+            """
+        else:
+            query_string = f"SELECT * FROM ({query_string}) WHERE ROWNUM <= {max_rows}"
+
+    return query_string
+
+
+def get_query_string_threads(base_query, filters=None, max_rows=1000, db_type="mysql", campo_chave="id", valor_ultima_linha=None) -> str:
+    """
+    Gera uma query SQL ajustada para diferentes bancos de dados, incluindo filtros, limite e paginação sem OFFSET.
+    
+    Args:
+        base_query (str): Query base (ex: 'SELECT * FROM tabela').
+        filters (list, optional): Lista de condições de filtro. Exemplo: ["idade > 30", "cidade = 'SP'"].
+        max_rows (int): Número máximo de linhas a serem retornadas.
+        db_type (str): Tipo de banco de dados ('mysql', 'sqlite', 'postgresql', 'mssql', 'oracle').
+        campo_chave (str): Nome do campo utilizado para paginação (ex: 'id').
+        valor_ultima_linha (int, optional): Último valor do campo chave carregado.
+
+    Returns:
+        str: Query SQL final formatada.
+    """
+    query_string = base_query
+
+    # Adiciona filtros, se houver
+    filtros = filters[:] if filters else []  # Evita modificar a lista original
+    if valor_ultima_linha is not None:
+        filtros.append(f"{campo_chave} > {valor_ultima_linha}")  # Evita repetir registros
+
+    if filtros:
+        query_string += f" WHERE {' AND '.join(filtros)}"
+
+    # Ordenação e Limite
+    if db_type in ["mysql", "sqlite", "postgresql"]:
+        query_string += f" ORDER BY {campo_chave} ASC LIMIT {max_rows}"
+
+    elif db_type in ["mssql", "SQL Server"]:
+        query_string += f" ORDER BY {campo_chave} ASC OFFSET 0 ROWS FETCH NEXT {max_rows} ROWS ONLY"
+
+    elif db_type == "oracle":
+        query_string = f"""
+            SELECT * FROM (
+                SELECT a.*, ROWNUM rnum FROM ({query_string} ORDER BY {campo_chave} ASC) a 
+                WHERE ROWNUM <= {max_rows}
+            ) WHERE rnum > {valor_ultima_linha if valor_ultima_linha else 0}
+        """
+
+    return query_string
+

@@ -105,12 +105,46 @@ class DataFrameTable(ttk.Frame):
                 self.total_pages = self._calculate_total_pages()
                 self.current_page = min(self.current_page, self.total_pages - 1)
 
-            log_message(self, f"Atualizando tabela para a página {self.current_page}...")
-            self.treeview_frame.update_table(self.df, self.current_page, self.rows_per_page)
-            self.navigation_frame.update_pagination(self.current_page, self.total_pages)
-            log_message(self, "Tabela e paginação atualizadas com sucesso.")
+            # log_message(self, f"Atualizando tabela para a página {self.current_page}...")
+            if self.navigation_frame:
+                self.root.after(0, self._check_navigation_frame)
+            else:
+                self.destroy()
+            # log_message(self, "Tabela e paginação atualizadas com sucesso.")
         except Exception as e:
             log_message(self, f"Erro ao atualizar tabela: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+    def _check_navigation_frame(self):
+        """Verifica se o navigation_frame existe na thread principal e atualiza a paginação."""
+        if self.navigation_frame.winfo_exists():
+            self.treeview_frame.update_table(self.df, self.current_page, self.rows_per_page)
+            self.navigation_frame.update_pagination(self.current_page, self.total_pages)
+    def update_table_for_search(self, df: Optional[pd.DataFrame] = None) -> None:
+        try:
+            if df is not None and not df.empty:
+                # 🔹 Se já houver dados, concatena em vez de sobrescrever
+                if hasattr(self, "df") and self.df is not None:
+                    dataframes_to_concat = [d for d in [self.df, df] if not d.empty]
+                    if dataframes_to_concat:
+                        self.df = pd.concat(dataframes_to_concat, ignore_index=True).drop_duplicates()
+                else:
+                    self.df = df.copy()
+
+                # 🔹 Recalcula a paginação
+                self.total_pages = self._calculate_total_pages()
+                self.current_page = min(self.current_page, self.total_pages - 1)
+
+            # log_message(self, f"Atualizando tabela para a página {self.current_page}...")
+            # 🔹 Atualiza a exibição da tabela
+            if self.navigation_frame and self.navigation_frame.winfo_exists():
+                self.navigation_frame.update_pagination(self.current_page, self.total_pages)
+            else:
+                self.destroy()
+
+            log_message(self, "Tabela e paginação atualizadas com sucesso.")
+        
+        except Exception as e:
+            log_message(self, f"Erro ao atualizar tabela: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+
 
     def prev_page(self) -> None:
         if self.current_page > 0:
