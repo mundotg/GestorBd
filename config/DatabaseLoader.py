@@ -67,83 +67,72 @@ def parse_date(date_value, col_type_str):
     # Se nenhum formato for válido, gera erro
     raise ValueError(f"Formato inválido para '{date_value}'. Formatos permitidos: {', '.join(formatos_alternativos)}")
 
-           
-            
+
 def get_filter_condition(self, col_name, col_type, value, params, db_type="postgres"):
     """
     Retorna a condição SQL correta para a coluna com base no tipo de dado e no banco de dados.
     """
-
     try:
-        if value.strip() == "":  # Verifica se está vazio
+        value = value.strip()
+        if value == "":
             raise ValueError(f"Valor inválido para '{col_name}': campo não pode estar vazio.")
 
         col_type_str = str(col_type).lower()
 
-        # 🔹 Suporte para UUID
-        if "uuid" in col_type_str:
-            value = str(UUID(value))  # Valida se é um UUID válido
+        # 🔹 Suporte para Enum
+        if self.enum_values.get(col_name) not in [None, "", []]:
             params[col_name] = value
             return f"{col_name} = :{col_name}"
 
-        # 🔹 Suporte para números (Integer, Numeric)
-        elif "numeric" in col_type_str or "integer" in col_type_str or isinstance(col_type, Numeric):
-            value = float(value)  # Tenta converter para número
+        # 🔹 Suporte para UUID
+        if "uuid" in col_type_str:
+            value = str(UUID(value))  # Valida UUID
             params[col_name] = value
+            return f"{col_name} = :{col_name}"
+
+        # 🔹 Suporte para Números (Integer, Numeric)
+        if "numeric" in col_type_str or "integer" in col_type_str or isinstance(col_type, Numeric):
+            params[col_name] = float(value)
             return f"{col_name} = :{col_name}"
 
         # 🔹 Suporte para Booleanos
-        elif "boolean" in col_type_str or isinstance(col_type, Boolean):
-            value = value.strip().lower()
-            if value in ["true", "1", "yes", "sim"]:
-                params[col_name] = True
-            elif value in ["false", "0", "no", "não"]:
-                params[col_name] = False
-            else:
+        if "boolean" in col_type_str or isinstance(col_type, Boolean):
+            boolean_map = {"true": True, "1": True, "yes": True, "sim": True, 
+                           "false": False, "0": False, "no": False, "não": False}
+            if value.lower() not in boolean_map:
                 raise ValueError(f"Valor inválido para booleano na coluna '{col_name}'.")
+            params[col_name] = boolean_map[value.lower()]
             return f"{col_name} = :{col_name}"
 
         # 🔹 Suporte para Datas e Timestamps
-        elif "date" in col_type_str or "timestamp" in col_type_str or isinstance(col_type, (Date, DateTime)) or col_type_str == "time":
-            try:
-                print("data valor:", value)
-                date_value = value.strip()
-                op = None
-                if not date_value:
-                    raise ValueError(f"Valor inválido para '{col_name}': campo de data não pode estar vazio.")
+        if "date" in col_type_str or "timestamp" in col_type_str or isinstance(col_type, (Date, DateTime)) or col_type_str == "time":
+            db_type_lower = db_type.lower()
+            if db_type_lower in ["postgresql", "postgres"]:
+                condition = f"CAST({col_name} AS TEXT) LIKE :{col_name}"
+            elif db_type_lower in ["mysql", "sql server"]:
+                condition = f"CONVERT({col_name}, CHAR) LIKE :{col_name}"
+            elif db_type_lower == "sqlite":
+                condition = f"{col_name} LIKE :{col_name}"  # No SQLite, colunas de data já são strings
+            else:
+                params[col_name] = value
+                return f"{col_name} = :{col_name}"
 
-                # 🔹 Ajusta a sintaxe SQL dependendo do banco de dados
-                db_type_lower = db_type.lower()
-                if db_type_lower == "postgresql" or db_type_lower == "postgres":
-                    condition = f"CAST({col_name} AS TEXT) LIKE :{col_name}"
-                elif db_type_lower in ["mysql", "sql server"]:
-                    condition = f"CONVERT({col_name}, CHAR) LIKE :{col_name}"
-                elif db_type_lower == "sqlite":
-                    condition = f"{col_name} LIKE :{col_name}"  # No SQLite, colunas de data já são strings
-                else:
-                    params[col_name] = date_value
-                    return f"{col_name} {op or '='} :{col_name}"
-
-                # 🔹 Usa % para buscas parciais
-                params[col_name] = f"%{date_value}%"
-                return condition
-
-            except ValueError as e:
-                formatos_permitidos = ', '.join(DATA_TYPE_FORMATS.values())
-                raise ValueError(f"Erro ao processar '{col_name}': {str(e)}. Formatos permitidos: {formatos_permitidos}.")
+            params[col_name] = f"%{value}%"
+            return condition
 
         # 🔹 Suporte para JSON (convertendo para texto)
-        elif "json" in col_type_str:
+        if "json" in col_type_str:
             params[col_name] = f"%{value}%"
+            if db_type_lower in ["postgresql", "postgres"]:
+                return f"{col_name}::TEXT LIKE :{col_name}"  # JSONB no PostgreSQL
             return f"CAST({col_name} AS TEXT) LIKE :{col_name}"
 
         # 🔹 Suporte para Strings (text, char, varchar)
-        elif "text" in col_type_str or "char" in col_type_str:
+        if "text" in col_type_str or "char" in col_type_str or "varchar" in col_type_str:
             params[col_name] = f"%{value}%"
             return f"{col_name} LIKE :{col_name}"
 
-        else:
-            raise TypeError(f"Tipo de coluna '{col_type}' não suportado para filtros.")
+        raise TypeError(f"Tipo de coluna '{col_type}' não suportado para filtros.")
 
     except (ValueError, TypeError) as e:
         raise ValueError(f"Erro ao processar '{col_name}': {e}")

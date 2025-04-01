@@ -1,3 +1,4 @@
+import gc
 import tkinter as tk
 from tkinter import ttk
 from components.status_bar import StatusBar
@@ -36,7 +37,7 @@ class DataAnalysisGUI:
         """Configura a interface gráfica."""
         self.log_message("Configurando interface gráfica...")
         self.root.title("Análise de Dados")
-        self.root.geometry("900x650")
+        self.root.geometry("1100x750")
 
         # Notebook (Abas)
         self.notebook = ttk.Notebook(self.root)
@@ -88,4 +89,5 @@ class DataAnalysisGUI:
         
 
         # Destruir a janela principal
+        gc.collect()
         self.root.destroy()

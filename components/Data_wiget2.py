@@ -18,10 +18,10 @@ class DateTimeEntry(ttk.Frame):
     def __init__(self, parent, data_type="datetime"):
         super().__init__(parent)
         self.data_type = data_type.lower()  # Converte para minúsculas para evitar erros
-        print("tipo: ",data_type)
+        # print("tipo: ",data_type)
         # Entry principal (invisível)
         self.frame_date = ttk.LabelFrame(self, text="data")
-        width = 10 if data_type == "date" else 18
+        width = 10 if data_type in "date" else 18
         self.entry = ttk.Entry(self.frame_date, width=width, state="normal")
         self.entry.grid(row=0, column=0, columnspan=1, padx=2, pady=5)
         # self.entry.grid_remove()  # 🔥 Esconde o campo
@@ -44,9 +44,12 @@ class DateTimeEntry(ttk.Frame):
         if self.data_type == "time":
             self.date_entry.grid_remove()
             self.entry.grid_remove()
-        elif self.data_type == "date" and self.data_type != "timestamp" :
-            print("not time")
-            self.time_entry.grid_remove()
+        elif self.data_type in "date" :
+            # print("not time")
+            # self.time_entry.pack_remove()
+            self.time_entry.destroy()
+            self.frame_time.grid_remove()
+            
 
         # Eventos para atualizar o Entry principal
         self.date_entry.bind("<<DateEntrySelected>>", self.update_entry)
@@ -99,6 +102,7 @@ class DateTimeEntry(ttk.Frame):
         # Atualiza o Entry apenas se formatted_date estiver definido
         self.entry.delete(0, tk.END)
         self.entry.insert(0, formatted_date if formatted_date else "Erro no formato")
+        print(formatted_date)
 
 
     def get_entry(self):

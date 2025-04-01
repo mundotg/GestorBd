@@ -11,7 +11,7 @@ class SavedTab:
     ):
         self.config_manager = config_manager
         self.log_message = log_message
-        self.db_type = db_type
+        self.db_type = db_type.strip().lower()
         self.engine = engine
         self.current_profile = current_profile
         

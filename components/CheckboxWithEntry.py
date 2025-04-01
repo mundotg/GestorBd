@@ -8,21 +8,23 @@ class CheckboxWithEntry(ttk.Frame):
         self, 
         parent, 
         label_text: str = "", 
-        entry_value: Union[str, bool] = False, 
+        entry_value: Union[str, bool] = "", 
         entry_width: int = 10,
     ):
         super().__init__(parent)
         
         # Tratamento de valores booleanos
-        if isinstance(entry_value, str):
+        if entry_value == "":
+            default_value=False
+        elif isinstance(entry_value, str):
             default_value = entry_value.lower() in ["true", "1", "yes", "sim"]
         else:
             default_value = bool(entry_value)
         self.label_text = label_text
         # Variáveis de estado
-        print(f"valor : {default_value}")
+        # print(f"valor : {default_value}")
         self.var_checked = tk.BooleanVar(value=bool(default_value) )
-        self.entry_var = tk.StringVar(value=str(default_value).lower())
+        self.entry_var = tk.StringVar(value=str(entry_value).lower())
 
         # Layout
         self.columnconfigure(0, weight=1)
@@ -53,17 +55,16 @@ class CheckboxWithEntry(ttk.Frame):
         def on_check(event=None) -> None:
             """Manipula o estado do checkbox e entrada."""
             checked = self.var_checked.get()  # Obtém o valor atual
-
-            # Alterna o valor do checkbox
-            self.var_checked.set(not checked)
-
+            
             # Atualiza o campo de entrada
             self.entry.config(state="normal")
             self.entry.delete(0, tk.END)
-            self.entry.insert(0, "true" if self.var_checked.get() else "false")
-            self.entry.config(state="readonly")  # Bloqueia edição manua
+            self.entry.insert(0, "true" if checked else "false")
+            self.entry.config(state="readonly")  # Bloqueia edição manual
+            
             # Log opcional
-            print(f"{self.label_text} Checkbox {'marcado' if checked else 'desmarcado'} {new_value}")
+            # print(f"{self.label_text} Checkbox {'marcado' if checked else 'desmarcado'} ")
+
         self.checkbox.bind("<Button-1>", on_check)
 
     

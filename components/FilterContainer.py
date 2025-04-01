@@ -1,3 +1,4 @@
+import gc
 from tkinter import messagebox
 import traceback
 from typing import Any
@@ -10,15 +11,17 @@ from components.DataWidget import DatabaseDateWidget
 from utils.validarText import _fetch_enum_values, validar_numero_float, validar_numero_inteiro
 
 class FilterContainer(ttk.LabelFrame):
-    def __init__(self, parent, log_message, engine: Any, db_type: str, status_var: Any, table_combobox: Any, aplicar_filter: Any, *args, **kwargs):
+    def __init__(self, parent, log_message,enum_values, engine: Any, db_type: str,update_table_widget, status_var: Any, table_combobox: Any, aplicar_filter: Any, *args, **kwargs):
         super().__init__(parent, text="Filtros", *args, **kwargs)
         self.log_message = log_message
         self.engine = engine
         self.status_var = status_var
         self.table_combobox = table_combobox
         self.aplicar_filter = aplicar_filter
-        self.enum_values = {}
-        self.db_type = db_type
+        self.enum_values = enum_values
+        self.db_type = db_type.lower()
+        self.update_table_widget = update_table_widget
+        self.table_name = ""
         
         self._setup_ui()
     
@@ -37,6 +40,12 @@ class FilterContainer(ttk.LabelFrame):
         self._setup_canvas()
         self._setup_scrollbars()
         self._setup_buttons()
+        self.scrollable_frame = ttk.Frame(self.filter_canvas)
+        self.filter_window = self.filter_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        # Configurar o scrollable_frame para que as colunas sejam responsivas
+        self.scrollable_frame.columnconfigure(2, weight=1)  # A coluna dos widgets de filtro expande
+        self.filter_canvas.bind("<Configure>", self._on_canvas_configure)
+        self.scrollable_frame.bind("<Configure>", lambda e: self.filter_canvas.configure(scrollregion=self.filter_canvas.bbox("all")))
         
         self.table_combobox.bind("<<ComboboxSelected>>", self.load_columns)
     
@@ -129,25 +138,22 @@ class FilterContainer(ttk.LabelFrame):
                             child.set('')
     
     def load_columns(self, event=None):
-        if self.scrollable_frame:
-            self.scrollable_frame.destroy()
-        table_name = self.table_combobox.get().strip()
-        if not table_name:
+        self.table_name = self.table_combobox.get().strip()
+        if not self.table_name:
             return
-        if hasattr(self, "scrollable_frame") and self.scrollable_frame:
-            self.scrollable_frame.destroy()
+        
+        if hasattr(self, "scrollable_frame") and self.scrollable_frame and self.scrollable_frame.winfo_exists():
+            # self.scrollable_frame.destroy()
+            for widget in self.scrollable_frame.winfo_children():
+                widget.destroy()
         # Criar um novo frame rolável para os filtros
-        self.scrollable_frame = ttk.Frame(self.filter_canvas)
-        self.filter_window = self.filter_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        # Configurar o scrollable_frame para que as colunas sejam responsivas
-        self.scrollable_frame.columnconfigure(2, weight=1)  # A coluna dos widgets de filtro expande
-        self.filter_canvas.bind("<Configure>", self._on_canvas_configure)
-        self.scrollable_frame.bind("<Configure>", lambda e: self.filter_canvas.configure(scrollregion=self.filter_canvas.bbox("all")))
+        
 
         try:
             inspector = inspect(self.engine)
-            columns = inspector.get_columns(table_name, schema=None)
+            columns = inspector.get_columns(self.table_name, schema=None)
             self.column_filters = {}
+            
             _fetch_enum_values(self=self, columns=columns, text=text, traceback=traceback)
             
             headers = ["Coluna", "Tipo", "Filtro"]
@@ -162,28 +168,28 @@ class FilterContainer(ttk.LabelFrame):
                     col_value1 = col_type.split(" ")[0].lower()
                 else:
                     col_value1 = col_type.lower()
-                # if "(" in col_type and ")" in col_type:
-                #     col_value = col_type.split("(")[0].split(")")[0].lower()
-                # else:
-                #     col_value = col_type.lower()  # Usa o próprio col_type se não houver parênteses
+                    
                 ttk.Label(self.scrollable_frame, text=col_name).grid(row=i, column=0, sticky=tk.W, padx=5, pady=3)
                 ttk.Label(self.scrollable_frame, text=col_value1).grid(row=i, column=1, sticky=tk.W, padx=5, pady=3)
                 self._add_filter_widget(col, col_type, i)
             
-            self.status_var.set(f"Colunas carregadas para tabela: {table_name}")
+            self.status_var.set(f"Colunas carregadas para tabela: {self.table_name}")
         except Exception as e:
             self.log_message(f"Erro ao carregar colunas: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
             messagebox.showerror("Erro", f"Erro ao obter colunas: {e}")
+        # self.update_table_widget()  por enquanto não carrega a tabela logo que seleciona um item na combobox
     
     def get_column_filters(self):
         return self.column_filters
     
     def _add_filter_widget(self, col, col_type, row):
         no_data = True
-        if "enum" in col_type:
+        if "enum" in col_type or (self.enum_values.get(col["name"]) not in [None, "", []]):
             values = self.enum_values.get(col["name"], ["Valor não disponível"])
+            if values and values[0] != "":
+                values = [""] + values
             entry = ttk.Combobox(self.scrollable_frame, values=values, state="readonly")
-            entry.set(values[0])  # Set the first value as default
+            entry.set("")  # Set the first value as default
         
         elif "int" in col_type or "integer" in col_type:
             vcmd = self.register(validar_numero_inteiro)

@@ -263,7 +263,7 @@ class EditModal(tk.Toplevel):
                 no_data = False
                 # var = tk.BooleanVar(value=False)
                 entry = CheckboxWithEntry(self.scrollable_frame,entry_value=value)
-                entry.grid(row=row, column=2, sticky=tk.EW, padx=5, pady=3)
+                entry.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=3)
                 entry = entry.entry
 
             elif "date" in col_type or "timestamp" in col_type or "time" in col_type or "datatime" in col_type:

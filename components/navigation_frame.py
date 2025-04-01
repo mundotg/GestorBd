@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import TclError, ttk, messagebox
 from typing import Any, Callable, Optional
 import pandas as pd
+from sqlalchemy import inspect
 
 from components.Create_registro_Modal import CreateModal
 from components.analit_frame_table import AnalysisFrame 
@@ -39,40 +40,63 @@ class NavigationFrame(ttk.Frame):
         self.refresh_button.pack(side=tk.RIGHT, padx=5)
         self.total_label.pack(side=tk.LEFT,fill=tk.X, pady=5)
         
-        self.gestao_label = ttk.LabelFrame(self,text=f"__________ gestão de tabela______")
+        self.gestao_label = ttk.LabelFrame(self,text=f"__________ gestão de tabela________")
         # Botão para ver registros mal formados
-        self.invalid_button = ttk.Button(self.gestao_label, text="criar novo registro", command=self.cria_regitro, style="DataTable.TButton")
+        self.invalid_button = ttk.Button(self.gestao_label, text="criar novo registro", command=self.cria_registro, style="DataTable.TButton")
         self.invalid_button.pack(side=tk.RIGHT, padx=5)
         self.analysis_button = ttk.Button(self.gestao_label, text="Analisar Tabela", command=self.open_analysis)
-        self.analysis_button.pack(side=tk.RIGHT,pady=5,padx=5)
+        self.analysis_button.pack(side=tk.RIGHT,padx=5)
         self.gestao_label.pack(side=tk.RIGHT,fill=tk.X, pady=5)
-    def cria_regitro(self):
-        self.on_data_change(self.df)
-        CreateModal(master=self, engine=self.engine, table_name=self.table_name, on_data_change=self.on_data_change, db_type=self.db_type, df=self.df)
-        return
+ 
+
+    def cria_registro(self):
+        """
+        Função para criar um novo registro em uma tabela selecionada.
+        """
+        # Obtém o nome da tabela selecionada na combobox, se disponível
+        # Inspeciona o banco de dados para buscar a chave primária da tabela
+        inspector = inspect(self.engine)
+        pk_constraint = inspector.get_pk_constraint(self.table_name)
+        primary_keys = pk_constraint.get("constrained_columns", [])
+
+        # Define a chave primária para a modal de criação
+        if primary_keys:
+            campo_primary_key = primary_keys[0]  # Usa a primeira chave primária encontrada
+        else:
+            # Caso não tenha chave primária explícita, busca uma coluna com valores únicos
+            unique_cols = [col for col in self.df.columns if self.df[col].is_unique]
+            campo_primary_key = unique_cols[0] if unique_cols else self.df.columns[0]
+
+        # Garante que um nome de coluna válido foi encontrado
+        if not campo_primary_key:
+            messagebox.showerror("Erro", "Nenhuma chave primária válida foi encontrada para essa tabela.")
+            return
+
+        # Cria a modal para inserção de registro
+        CreateModal( master=self,engine=self.engine, table_name=self.table_name, on_data_change=self.on_data_change,db_type=self.db_type, df=self.df,column_name_key=campo_primary_key)
+
     def open_analysis(self):
         analysis_window = tk.Toplevel()
         analysis_window.title("Análise Detalhada")
         analysis_frame = AnalysisFrame(analysis_window, self.df)
         analysis_frame.pack(fill=tk.BOTH, expand=True)
 
-    def update_pagination(self, current_page: int, total_pages: int):
-        """Updates the page label and button states."""
-        try:
-            if self.page_label.winfo_ismapped():
-                self.page_label.config(text=f'📄Page {current_page + 1} of {total_pages}')
-                self.prev_button.config(state=tk.NORMAL if current_page > 0 else tk.DISABLED)
-                self.next_button.config(state=tk.NORMAL if current_page < total_pages - 1 else tk.DISABLED)
-                self.total_label.config(text=f"total de registro nº {len(self.df) if self.df is not None else 0}")
-                
-        except TclError as e:
-            print("Tentativa de atualizar um widget que foi destruído.",e)
-            
-            self.is_destroyed = True  # Marca que a interface foi destruída
-            self.destroy()  # Fecha a janela principal
-            self.root.destroy()
-            self.quit()
+    def update_pagination(self, current_page: int, total_pages: int, length: int = None):
+        """Atualiza o rótulo da página e o estado dos botões de navegação."""
         
+        if length is not None and isinstance(length, int):
+            self.total_label.config(text=f"Total de registros: {length}")
+
+        # Evita exibir "Page 1 of 0"
+        total_pages = max(total_pages, 1)  
+        self.page_label.config(text=f'📄 Página {current_page + 1} de {total_pages}')
+
+        # Ativa/desativa os botões corretamente
+        if hasattr(self, "prev_button") and self.prev_button:
+            self.prev_button.config(state=tk.NORMAL if current_page > 0 else tk.DISABLED)
+        if hasattr(self, "next_button") and self.next_button:
+            self.next_button.config(state=tk.NORMAL if current_page < total_pages - 1 else tk.DISABLED)
+ 
     
     def _validate_prev_page(self):
         """Validates and navigates to the previous page."""

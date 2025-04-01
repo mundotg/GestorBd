@@ -115,10 +115,18 @@ class TreeViewFrame(ttk.Frame):
 
     def _setup_columns(self):
         """Configura as colunas do Treeview."""
-        self.tree["columns"] = list(self.df.columns) if not self.df.empty else []
+        
+        if self.df.empty:
+            print("Aviso: DataFrame está vazio. Nenhuma coluna será configurada.")
+            self.tree["columns"] = []  # Garante que o Treeview não terá colunas inválidas
+            return  # Sai da função
+
+        self.tree["columns"] = list(self.df.columns)  # Apenas se houver colunas válidas
+        
         for col in self.df.columns:
             self.tree.heading(col, text=col, anchor=tk.CENTER)
             self.tree.column(col, width=self._calculate_column_width(col), anchor=tk.CENTER, minwidth=self.min_column_width)
+
 
     def _calculate_column_width(self, column_name):
         """Calcula a largura ideal de uma coluna."""
@@ -160,83 +168,3 @@ class TreeViewFrame(ttk.Frame):
             self.tree.focus(item_id)
             self.tree.see(item_id)
 
-
-""" 
-# Exemplo de uso:
-if __name__ == "__main__":
-    import numpy as np
-    
-    root = tk.Tk()
-    root.title("TreeView com Redimensionamento e Duplo Clique")
-    root.geometry("800x600")
-    
-    # Estilo personalizado para o treeview
-    style = ttk.Style()
-    style.configure("DataTable.Treeview", rowheight=25)
-    style.configure("DataTable.Treeview.Heading", font=("Arial", 10, "bold"))
-    
-    # Dados de exemplo
-    data = {
-        "ID": np.arange(1, 101),
-        "Nome": [f"Pessoa {i}" for i in range(1, 101)],
-        "Email": [f"pessoa{i}@exemplo.com" for i in range(1, 101)],
-        "Idade": np.random.randint(18, 80, 100),
-        "Salário": np.random.uniform(1000, 10000, 100).round(2),
-        "Departamento": np.random.choice(["RH", "TI", "Marketing", "Vendas", "Financeiro"], 100),
-        "Data Contratação": [f"{np.random.randint(1, 28)}/{np.random.randint(1, 13)}/{np.random.randint(2010, 2023)}" for _ in range(100)]
-    }
-    df = pd.DataFrame(data)
-    
-    def show_edit_modal(index):
-        #Função de exemplo para exibir modal de edição.
-        if index is not None:
-            item_data = df.iloc[index]
-            top = tk.Toplevel(root)
-            top.title(f"Editar Registro #{item_data['ID']}")
-            top.geometry("400x300")
-            top.transient(root)
-            top.grab_set()
-            
-            # Criar um label com as informações
-            info_text = "\n".join([f"{col}: {value}" for col, value in item_data.items()])
-            lbl = ttk.Label(top, text=info_text, justify="left")
-            lbl.pack(padx=20, pady=20)
-            
-            # Botão de fechar
-            ttk.Button(top, text="Fechar", command=top.destroy).pack(pady=10)
-    
-    # Adicionar o frame à janela principal
-    frame = ttk.Frame(root)
-    frame.pack(fill="both", expand=True, padx=10, pady=10)
-    
-    # Instanciar o TreeViewFrame
-    current_page = 0
-    rows_per_page = 10
-    tree_frame = TreeViewFrame(frame, show_edit_modal, df, column_width=120)
-    tree_frame.pack(fill="both", expand=True)
-    
-    # Atualizar tabela com paginação
-    tree_frame.update_table(df, current_page, rows_per_page)
-    
-    # Adicionar controles de paginação
-    pagination_frame = ttk.Frame(root)
-    pagination_frame.pack(fill="x", padx=10, pady=5)
-    
-    def update_page(delta):
-        nonlocal current_page
-        new_page = current_page + delta
-        if 0 <= new_page * rows_per_page < len(df):
-            current_page = new_page
-            tree_frame.update_table(df, current_page, rows_per_page)
-            page_label.config(text=f"Página {current_page + 1} de {(len(df) - 1) // rows_per_page + 1}")
-    
-    prev_btn = ttk.Button(pagination_frame, text="Anterior", command=lambda: update_page(-1))
-    prev_btn.pack(side="left", padx=5)
-    
-    page_label = ttk.Label(pagination_frame, text=f"Página {current_page + 1} de {(len(df) - 1) // rows_per_page + 1}")
-    page_label.pack(side="left", padx=10)
-    
-    next_btn = ttk.Button(pagination_frame, text="Próximo", command=lambda: update_page(1))
-    next_btn.pack(side="left", padx=5)
-    
-    root.mainloop() """
