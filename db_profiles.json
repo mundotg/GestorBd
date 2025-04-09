@@ -22,5 +22,13 @@
     "user": "default",
     "password": "B7mIKbgpvxO8",
     "database": "verceldb"
+  },
+  "Edu_db": {
+    "db_type": "MySQL",
+    "host": "192.168.43.117",
+    "port": "3306",
+    "user": "root",
+    "password": "",
+    "database": "orgchanadb"
   }
 }

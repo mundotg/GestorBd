@@ -8,22 +8,48 @@ import tkinter as tk
 from tkinter import ttk
 from components.Data_wiget2 import DateTimeEntry
 from components.DataWidget import DatabaseDateWidget
-from utils.validarText import _fetch_enum_values, validar_numero_float, validar_numero_inteiro
+from components.filter_column_show_in_consulta import FilterColumnShowInConsulta
+from config.salavarInfoAllColumn import get_columns_by_table, save_columns_to_file
+from utils.filter_util import _update_column_selection, _update_status_label, get_selected_columns
+from utils.validarText import _fetch_enum_values, validar_numero
 
 class FilterContainer(ttk.LabelFrame):
-    def __init__(self, parent, log_message,enum_values, engine: Any, db_type: str,update_table_widget, status_var: Any, table_combobox: Any, aplicar_filter: Any, *args, **kwargs):
+    def __init__(self, parent, log_message,database_name,enum_values,columns, engine: Any, db_type: str,update_table_widget, status_var: Any, table_combobox: Any, *args, **kwargs):
         super().__init__(parent, text="Filtros", *args, **kwargs)
         self.log_message = log_message
         self.engine = engine
         self.status_var = status_var
         self.table_combobox = table_combobox
-        self.aplicar_filter = aplicar_filter
-        self.enum_values = enum_values
+        self.parent = parent
         self.db_type = db_type.lower()
         self.update_table_widget = update_table_widget
         self.table_name = ""
-        
+        self.enum_values = enum_values
+        self.columns = columns
+        self.database_name = database_name
+        self.filtro_colunas = None
+        self.column_for_show = {}
         self._setup_ui()
+        
+    def update_column_filters(self,col_name:str, widget:Any,status_label:Any, event=None,lista={}):
+        """
+        Atualiza os filtros de coluna com os valores fornecidos.
+        """
+        
+        if bool(lista.get(col_name)):  # Se o checkbox foi marcado
+            lista[col_name] = False
+            widget.set_value(False) 
+        else:
+            lista[col_name] = True
+            widget.set_value(True) 
+         # Atualiza o checkbox
+        self.column_for_show = lista
+        # Atualiza a contagem de colunas selecionadas
+        if not status_label or not status_label.winfo_exists():
+            return
+            
+        selected_count = sum(1 for selected in self.column_for_show.values() if selected)
+        status_label.config(text=f"{selected_count} de {len(self.columns)} colunas selecionadas")
     
     def _setup_ui(self):
         # Configurar o container para preencher todo o espaço disponível
@@ -40,14 +66,8 @@ class FilterContainer(ttk.LabelFrame):
         self._setup_canvas()
         self._setup_scrollbars()
         self._setup_buttons()
-        self.scrollable_frame = ttk.Frame(self.filter_canvas)
-        self.filter_window = self.filter_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        # Configurar o scrollable_frame para que as colunas sejam responsivas
-        self.scrollable_frame.columnconfigure(2, weight=1)  # A coluna dos widgets de filtro expande
-        self.filter_canvas.bind("<Configure>", self._on_canvas_configure)
-        self.scrollable_frame.bind("<Configure>", lambda e: self.filter_canvas.configure(scrollregion=self.filter_canvas.bbox("all")))
         
-        self.table_combobox.bind("<<ComboboxSelected>>", self.load_columns)
+        self.table_combobox.bind("<<ComboboxSelected>>",self.load_columns)
     
     def _setup_canvas(self):
         self.filter_canvas = tk.Canvas(self.container, borderwidth=0, highlightthickness=0)
@@ -73,8 +93,6 @@ class FilterContainer(ttk.LabelFrame):
         self.filter_canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.filter_canvas.bind("<Shift-MouseWheel>", self._on_horizontal_scroll)
     
-    def aplicar_filter_func(self):
-        self.aplicar_filter(apply_filter_var=self.aplicar_filter_var)
     
     def _setup_buttons(self):
         button_frame = ttk.Frame(self.container)
@@ -85,13 +103,85 @@ class FilterContainer(ttk.LabelFrame):
         button_frame.columnconfigure(1, weight=1)
         
         self.aplicar_filter_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(button_frame, text="Aplicar Filtro", variable=self.aplicar_filter_var, command=self.aplicar_filter_func).grid(row=0, column=0, padx=10, sticky="w")
+        ttk.Checkbutton(button_frame, text="Aplicar Filtro", variable=self.aplicar_filter_var, command=self.abrir_modal_selecao).grid(row=0, column=0, padx=10, sticky="w")
         ttk.Button(button_frame, text="Limpar Filtros", command=self.clear_filters).grid(row=0, column=1, padx=10, sticky="e")
     
     def _on_canvas_configure(self, event):
         self.filter_canvas.itemconfig(self.filter_window, width=event.width)
         self.filter_canvas.configure(scrollregion=self.filter_canvas.bbox("all"))
-    
+    def get_for_query(self):
+        """Retorna string formatada para uso em consultas SQL Retorna uma string com as colunas selecionadas, separadas por vírgula, para uso em uma query SQL"""
+        try:
+            selected_columns = get_selected_columns(self)
+            if not selected_columns:
+                return "*"
+            
+            # Ajustando a formatação para diferentes SGBDs
+            formatted_columns = []
+            for column in selected_columns:
+                # Aqui verificamos o tipo de banco de dados, ajustando a sintaxe conforme necessário
+                if self.db_type == 'mysql':
+                    formatted_columns.append(f"`{column}`")  # Para MySQL, usamos backticks
+                elif self.db_type == 'sqlserver':
+                    formatted_columns.append(f"[{column}]")  # Para SQL Server, usamos colchetes
+                elif self.db_type == 'oracle':
+                    formatted_columns.append(f'"{column}"')  # Para Oracle, usamos aspas duplas
+                else:
+                    formatted_columns.append(f'"{column}"')  # Para PostgreSQL, usamos aspas duplas (padrão)
+            
+            return ", ".join(formatted_columns)
+        
+        except Exception as e:
+            self.log_message(f"Erro ao montar string de colunas para query: {e}", "error")
+            return "*"
+   
+    def abrir_modal_selecao(self):
+        """Abre o modal para seleção de colunas."""
+
+        self.fechar_modal_anterior()
+
+        # Cria novo modal
+        try:
+            modal = tk.Toplevel()
+            modal.title("Seleção de Colunas")
+            modal.geometry("390x410")
+
+            # Instancia o seletor de colunas
+            self.filtro_colunas = FilterColumnShowInConsulta(
+                parent=modal,
+                column=self.columns,
+                column_for_show=self.column_for_show,
+                log_message=self.log_message,
+                table_name=self.table_name,
+                update_column_filters=self.update_column_filters
+            )
+
+        except Exception as e:
+            self.log_message(
+                f"Erro ao criar filtro de colunas: {e} ({type(e).__name__})\n{traceback.format_exc()}",
+                level="error"
+            )
+
+
+    def fechar_modal_anterior(self):
+        """Fecha o modal anterior, se estiver aberto e for de outra tabela."""
+        if hasattr(self, 'filtro_colunas') and self.filtro_colunas:
+            if self.filtro_colunas.is_modal_open():
+                try:
+                    if self.filtro_colunas.winfo_exists():
+                        self.filtro_colunas.destroy()
+
+                    if self.filtro_colunas.parent and self.filtro_colunas.parent.winfo_exists():
+                        self.filtro_colunas.parent.destroy()
+
+                except Exception as e:
+                    self.log_message(
+                        f"Erro ao destruir janela anterior: {e} ({type(e).__name__})",
+                        level="warning"
+                    )
+                finally:
+                    gc.collect()
+
     def _on_mousewheel(self, event):
         self.filter_canvas.yview_scroll(-1 * (event.delta // 120), "units")
     
@@ -136,22 +226,38 @@ class FilterContainer(ttk.LabelFrame):
                             child.delete(0, tk.END)
                         elif isinstance(child, ttk.Combobox):
                             child.set('')
+    def create_frame_filter_scroll(self):
+        if hasattr(self, "scrollable_frame") and self.scrollable_frame and self.scrollable_frame.winfo_exists():
+            for widget in self.scrollable_frame.winfo_children():
+                 widget.destroy()
+            self.scrollable_frame.destroy()
+        # Criar um novo frame rolável para os filtros
+        self.scrollable_frame = ttk.Frame(self.filter_canvas)
+        self.filter_window = self.filter_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        # Configurar o scrollable_frame para que as colunas sejam responsivas
+        self.scrollable_frame.columnconfigure(2, weight=1)  # A coluna dos widgets de filtro expande
+        self.filter_canvas.bind("<Configure>", self._on_canvas_configure)
+        self.scrollable_frame.bind("<Configure>", lambda e: self.filter_canvas.configure(scrollregion=self.filter_canvas.bbox("all")))
     
     def load_columns(self, event=None):
         self.table_name = self.table_combobox.get().strip()
+        self.column_for_show = {}
         if not self.table_name:
             return
         
-        if hasattr(self, "scrollable_frame") and self.scrollable_frame and self.scrollable_frame.winfo_exists():
-            # self.scrollable_frame.destroy()
-            for widget in self.scrollable_frame.winfo_children():
-                widget.destroy()
-        # Criar um novo frame rolável para os filtros
-        
+        self.create_frame_filter_scroll()
 
         try:
-            inspector = inspect(self.engine)
-            columns = inspector.get_columns(self.table_name, schema=None)
+            self.columns = get_columns_by_table(self.db_type+self.database_name+self.table_name, "tables_columns_data.pkl", log_message=self.log_message)
+            if self.columns:
+                columns = self.columns
+            else:
+                inspector = inspect(self.engine)
+                self.columns= inspector.get_columns(self.table_name, schema=None)
+                if save_columns_to_file({self.db_type+self.database_name+self.table_name: self.columns}, "tables_columns_data.pkl", log_message=self.log_message):
+                    self.log_message("salvo com sucesso","info")
+                columns = self.columns
+            # print(columns)    
             self.column_filters = {}
             
             _fetch_enum_values(self=self, columns=columns, text=text, traceback=traceback)
@@ -192,11 +298,11 @@ class FilterContainer(ttk.LabelFrame):
             entry.set("")  # Set the first value as default
         
         elif "int" in col_type or "integer" in col_type:
-            vcmd = self.register(validar_numero_inteiro)
+            vcmd = self.register(validar_numero)
             entry = ttk.Entry(self.scrollable_frame, validate="key", validatecommand=(vcmd, "%P"))
         
         elif "float" in col_type or "decimal" in col_type or "numeric" in col_type:
-            vcmd = self.register(lambda s: validar_numero_float(s, allow_float=True))
+            vcmd = self.register(lambda s: validar_numero(s, allow_float=True))
             entry = ttk.Entry(self.scrollable_frame, validate="key", validatecommand=(vcmd, "%P"))
         
         elif "bool" in col_type or col_type in ["bit", "boolean"]:

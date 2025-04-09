@@ -7,20 +7,23 @@ from typing import Any, Optional
 class TreeViewFrame(ttk.Frame):
     """Cria um Treeview para exibir um DataFrame do pandas com colunas responsivas."""
     
-    def __init__(self, master: Any, show_edit_modal: Any,log_message:Any, df: Optional[pd.DataFrame] = None, 
-                 column_width: int = 100, min_column_width: int = 50):
+    def __init__(self, master: Any,databse_name, show_edit_modal: Any,log_message:Any, df: Optional[pd.DataFrame] = None,
+                 columns: Optional[dict[str, Any]] = None, column_width: int = 100, min_column_width: int = 50):
         super().__init__(master)
         self.df = df if df is not None else pd.DataFrame()
         self.column_width = column_width
         self.min_column_width = min_column_width
         self.show_edit_modal = show_edit_modal
         self.log_message=log_message
-
+        self.columns = []
+        for i, col in enumerate(columns, start=1):
+            self.columns.append(col["name"])
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-
+       
         self.resizing_column = None
         self.resizing_x = 0
+        self.databse_name = databse_name
 
         self._create_widgets()
         self._setup_columns()
@@ -39,10 +42,9 @@ class TreeViewFrame(ttk.Frame):
 
         self.tree_scroll_x = ttk.Scrollbar(self.tree_frame, orient="horizontal", command=self.tree_xview)
         self.tree_scroll_x.grid(row=1, column=0, sticky="ew")
-
         self.tree = ttk.Treeview(
             self.tree_frame,
-            columns=[],
+            columns=list(self.columns),
             show='headings',
             yscrollcommand=self.tree_scroll_y.set,
             xscrollcommand=self.tree_scroll_x.set,
@@ -79,9 +81,13 @@ class TreeViewFrame(ttk.Frame):
             for i, col in enumerate(columns):
                 new_width = max(self.min_column_width, int((col_widths[i] / sum(col_widths)) * available_width))
                 self.tree.column(col, width=new_width)
-
+    def _fechar_modal(self):
+        # self.modal_aberto = False
+        return
     def _on_double_click(self, event):
         """Abre o modal de edição ao dar duplo clique em um item."""
+        # if self.modal_aberto:
+        #     return
         region = self.tree.identify("region", event.x, event.y)
         if region == "cell":
             item_id = self.tree.identify_row(event.y)
@@ -89,7 +95,8 @@ class TreeViewFrame(ttk.Frame):
                 try:
                     index = self.tree.index(item_id)  # Obtém o índice no TreeView
                     self.log_message(self, f"Duplo clique detectado. ID: {item_id}, Índice no TreeView: {index}")
-                    self.show_edit_modal(index)  # Passa o índice correto
+                    self.show_edit_modal(index,self._fechar_modal)  # Passa o índice correto
+                    # self.modal_aberto = True
                 except Exception as e:
                     self.log_message(self, f"Erro ao identificar índice no TreeView: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
 
@@ -115,18 +122,20 @@ class TreeViewFrame(ttk.Frame):
 
     def _setup_columns(self):
         """Configura as colunas do Treeview."""
-        
-        if self.df.empty:
-            print("Aviso: DataFrame está vazio. Nenhuma coluna será configurada.")
-            self.tree["columns"] = []  # Garante que o Treeview não terá colunas inválidas
-            return  # Sai da função
 
-        self.tree["columns"] = list(self.df.columns)  # Apenas se houver colunas válidas
-        
+        if self.df is None or self.df.empty:
+            self.tree["columns"] = self.columns
+            self.tree["show"] = "headings"
+            self.log_message("Aviso: DataFrame está vazio ou indefinido. Nenhuma coluna será configurada.")
+            return
+
+        # Configura colunas com base no DataFrame
+        self.tree["columns"] = list(self.df.columns)
+        self.tree["show"] = "headings"
+
         for col in self.df.columns:
             self.tree.heading(col, text=col, anchor=tk.CENTER)
             self.tree.column(col, width=self._calculate_column_width(col), anchor=tk.CENTER, minwidth=self.min_column_width)
-
 
     def _calculate_column_width(self, column_name):
         """Calcula a largura ideal de uma coluna."""

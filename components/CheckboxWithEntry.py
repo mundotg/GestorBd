@@ -16,10 +16,13 @@ class CheckboxWithEntry(ttk.Frame):
         # Tratamento de valores booleanos
         if entry_value == "":
             default_value=False
+            entry_value = ""
         elif isinstance(entry_value, str):
             default_value = entry_value.lower() in ["true", "1", "yes", "sim"]
+            entry_value = default_value
         else:
             default_value = bool(entry_value)
+            entry_value = default_value
         self.label_text = label_text
         # Variáveis de estado
         # print(f"valor : {default_value}")
@@ -31,11 +34,11 @@ class CheckboxWithEntry(ttk.Frame):
         self.columnconfigure(1, weight=1)
         self.style = ttk.Style()
         self.style.configure("Custom.TCheckbutton", foreground="blue", background="lightgray")
-
+        self.func_on_check = None
         # Checkbox
         self.checkbox = ttk.Checkbutton(
             self, 
-            text=label_text, 
+            text=self.label_text, 
             variable=self.var_checked,
             style="Custom.TCheckbutton"
         )
@@ -59,33 +62,43 @@ class CheckboxWithEntry(ttk.Frame):
             # Atualiza o campo de entrada
             self.entry.config(state="normal")
             self.entry.delete(0, tk.END)
-            self.entry.insert(0, "true" if checked else "false")
+            self.entry.insert(0, "false" if checked else "true")
             self.entry.config(state="readonly")  # Bloqueia edição manual
-            
-            # Log opcional
-            # print(f"{self.label_text} Checkbox {'marcado' if checked else 'desmarcado'} ")
+            # self.update_idletasks()  # Atualiza o layout imediatamente
 
         self.checkbox.bind("<Button-1>", on_check)
 
     
-
+    def set_on_check(self, func) -> None:
+        """Define a função a ser chamada quando o checkbox for marcado/desmarcado."""
+        self.checkbox.bind("<Button-1>", func)
     def get_value(self) -> object:
         """Retorna o estado atual do widget."""
         return {
             'value': self.var_checked.get()
         }
+    def get_entry(self) -> str:
+        """Retorna o valor do campo de entrada."""
+        return self.entry.get()
+    def set_value(self, value: bool) -> None:
+        """Define o estado do checkbox."""
+        valor = self.var_checked.get()
+        self.var_checked.set(value)
+        if valor:
+            self.checkbox.state(["selected"])
+        else:
+            self.checkbox.state(["!selected"])
+        # Atualiza o campo de entrada
+        self.entry.config(state="normal")
+        self.entry.delete(0, tk.END)
+        self.entry.insert(0, "true" if value else "false")
+        self.entry.config(state="readonly")
+        # self.update_idletasks()  # Atualiza o layout imediatamente
+    def set_entry(self, value: str) -> None:    
+        """Define o valor do campo de entrada."""
+        self.entry.config(state="normal")
+        self.entry.delete(0, tk.END)
+        self.entry.insert(0, value)
+        self.entry.config(state="readonly")
+        # self.update_idletasks()  # Atualiza o layout imediatamente
 
-# Criar a janela principal
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Checkbox com Entry")
-
-    # Criar o componente personalizado
-    checkbox = CheckboxWithEntry(root, "Ativar Opção")
-    checkbox.pack(pady=10)
-
-    # Botão para testar o valor do checkbox
-    btn_get_value = ttk.Button(root, text="Obter Valor", command=lambda: print(checkbox.get_value()))
-    btn_get_value.pack(pady=10)
-
-    root.mainloop()

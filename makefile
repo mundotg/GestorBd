@@ -38,3 +38,5 @@ reset:
 	@echo "🔄 Removendo ambiente virtual..."
 	@if exist $(VENV) rmdir /s /q $(VENV)
 	@echo "✅ Ambiente virtual removido!"
+freeze:
+	@pip freeze > requirements.txt

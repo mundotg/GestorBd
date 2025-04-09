@@ -1,7 +1,6 @@
 import gc
 import tkinter as tk
 from tkinter import ttk, messagebox
-import numpy as np
 import pandas as pd
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -11,8 +10,7 @@ import traceback
 from components.CheckboxWithEntry import CheckboxWithEntry
 from components.Data_wiget2 import DateTimeEntry
 from components.DataWidget import DatabaseDateWidget
-from utils.logger import log_message as escrever
-from utils.validarText import _convert_column_type, _fetch_enum_values, _get_placeholder, _map_column_type, get_valor_idependente_entry, validar_numero, convert_values,_is_system_field
+from utils.validarText import  _convert_column_type_for_string, _map_column_type, get_valor_idependente_entry, quote_identifier, validar_numero, _is_system_field, validar_numero_float
 
 class ColumnInfo(TypedDict):
     name: str
@@ -23,28 +21,26 @@ class ColumnInfo(TypedDict):
 class CreateModal(tk.Toplevel):
     """Creates a modal to add a new record to a database table."""
     def __init__(
-        self, master: Any, engine, table_name: str, df: Any,column_name_key:str,
+        self, master: Any, engine,databse_name, table_name: str, df: Any,column_name_key:str,
         db_type: str = "postgresql", on_data_change: Optional[Callable[[pd.DataFrame], None]] = None,
-        column_types: Optional[Dict[str, str]] = None, enum_values: Optional[Dict[str, List[str]]] = None
+        columns: Optional[Dict[str, str]] = None, enum_values: Optional[Dict[str, List[str]]] = None, log_message :Any = None
     ):
         super().__init__(master)
         self.engine = engine
         self.table_name = table_name
         self.on_data_change = on_data_change
-        self.column_types = column_types or {}
         self.db_type = db_type.lower()
         self.field_entries: Dict[str, Union[ttk.Entry, ttk.Combobox, tk.BooleanVar, DatabaseDateWidget, tk.Text]] = {}
-        self.enum_values = enum_values or {}
-        self.column_info = []
+        self.enum_values = enum_values 
+        self.column_info = columns 
         self.df = df
+        self.column_types = {}
         self.column_name_key=column_name_key
+        self.databse_name = databse_name
+        self.log_message = log_message
         
         self._setup_window()
         self._create_widgets()
-
-    def log_message(self, message: str, level: str = "info"):
-        """Log a message with the specified level."""
-        escrever(self=self, message=message, level=level)
 
     def _setup_window(self):
         """Configure the modal window."""
@@ -123,7 +119,6 @@ class CreateModal(tk.Toplevel):
         """Create input fields based on database schema."""
         try:
             # Get column information
-            self.column_info = self._get_column_info()
             
             # Create a header row
             ttk.Label(self.fields_frame, text="Campo", font=("Arial", 10, "bold"), 
@@ -140,7 +135,10 @@ class CreateModal(tk.Toplevel):
                 default_value = col.get("default", None)
                 
                 # Skip auto-increment columns and other system fields
-                if _is_system_field(col_name, col_type, self.column_info,self.db_type,self.table_name,self.engine):
+                if _is_system_field(col_name, col_type, self.column_info,self.db_type,self.table_name,self.engine,self.databse_name,self.log_message):
+                    if not  self.column_types.get(col_name):
+                        self.column_types[col_name] = _map_column_type(col_type)
+                    print(f"col_name={col_name}; nullable={nullable} ; default_value={default_value} col_type={col_type}")
                     continue
                 
                 # Create label with required indicator
@@ -158,25 +156,9 @@ class CreateModal(tk.Toplevel):
             self.fields_frame.columnconfigure(1, weight=1, minsize=300)
             
         except Exception as e:
-            self.log_message(f"Erro ao criar campos: {traceback.format_exc()}", level="error")
+            self.log_message(f"Erro ao criar campos: {e} {traceback.format_exc()}", level="error")
             messagebox.showerror("Erro", f"Falha ao criar campos de edição: {str(e)}")
             raise  # Relevanta a exceção para depuração
-
-
-    def _get_column_info(self) -> List[Dict]:
-        """Get column information from the database."""
-        try:
-            inspector = inspect(self.engine)
-            columns = inspector.get_columns(self.table_name)
-            
-            # Fetch enum values if not provided
-            if not self.enum_values:
-                _fetch_enum_values(self,columns,text,traceback)
-                
-            return columns
-        except Exception as e:
-            self.log_message(f"Erro ao obter informações das colunas: {traceback.format_exc()}", level="error")
-            raise RuntimeError(f"Falha ao obter esquema da tabela: {str(e)}")
 
     def _scroll_canvas(self, event):
         """Scroll the canvas with the mouse wheel."""
@@ -195,65 +177,63 @@ class CreateModal(tk.Toplevel):
         try:
             # Convert default value to string if it exists
             str_value = str(default_value) if default_value is not None else ""
+            if not  self.column_types.get(col_name):
+                self.column_types[col_name] = _map_column_type(col_type)
             widget = None
             no_data = True
             # Normalize type for case-insensitive comparison
             col_type = col_type.lower()
             # Create the appropriate widget based on type
             if "enum" in col_type or (self.enum_values.get(col_name) not in [None, "", []]):
-                if not self.column_types.get(col_name):
-                    self.column_types[col_name] = _map_column_type(col_type)
                 values = self.enum_values.get(col_name, ["Valor não disponível"])
                 widget = ttk.Combobox(self.fields_frame, values=values, state="readonly")
+                if str_value:
+                    widget.set(str_value)
                 if values:
                     widget.set(values[0])  # Set the first value as default
             
             elif "int" in col_type or "integer" in col_type:
-                if not self.column_types.get(col_name):
-                    self.column_types[col_name] = _map_column_type(col_type)
                 vcmd = self.register(validar_numero)
                 widget = ttk.Entry(self.fields_frame, validate="key", validatecommand=(vcmd, "%P"))
-                if default_value is not None:
+                if default_value is not None and default_value != "" or not nullable:
                     widget.insert(0, str_value)
             
             elif "float" in col_type or "decimal" in col_type or "numeric" in col_type:
-                if not self.column_types.get(col_name):
-                    self.column_types[col_name] = _map_column_type(col_type)
                 vcmd = self.register(lambda s: validar_numero(s, allow_float=True))
                 widget = ttk.Entry(self.fields_frame, validate="key", validatecommand=(vcmd, "%P"))
                 if default_value is not None:
                     widget.insert(0, str_value)
             
             elif "bool" in col_type or col_type in "bit" or col_type in "boolean":
-                if not self.column_types.get(col_name):
-                    self.column_types[col_name] = _map_column_type(col_type)
                 no_data = False
+                valor= False
+                if default_value is not None and default_value != "" or not nullable:
+                    print("default_value: ",default_value)
+                    valor= default_value
                 # var = tk.BooleanVar(value=False)
-                entry = CheckboxWithEntry(self.fields_frame)
+                entry = CheckboxWithEntry(self.fields_frame,entry_value=valor)
                 entry.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=3)
                 entry = entry.entry
             
             elif "date" in col_type or "datetime" in col_type or "timestamp" in col_type  or "time" in col_type:
                 try:
-                    if not  self.column_types.get(col_name):
-                        self.column_types[col_name] = _map_column_type(col_type)
+                    
                     entry = DateTimeEntry(self.fields_frame,col_type)
                     entry.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=3)
-                    # entry.set_date(date=str_value,time=str_value)
+                    if default_value is not None and default_value != "" or not nullable:
+                        entry.set_default_value()
                     widget = entry.entry
                     no_data = False
-                except Exception:
-                    self.log_message(f"Erro criando widget de data: {traceback.format_exc()}", level="error")
+                except Exception as e:
+                    self.log_message(f"Erro criando widget de data:{e} {traceback.format_exc()}", level="error")
                     widget = ttk.Entry(self.fields_frame)
-                    if default_value is not None:
+                    if default_value is not None and default_value != "" or not nullable:
                         widget.insert(0, str_value)
            
             else:
                 # Default to a simple entry for unrecognized types
-                if not  self.column_types.get(col_name):
-                        self.column_types[col_name] = _map_column_type(col_type)
                 widget = ttk.Entry(self.fields_frame)
-                if default_value is not None:
+                if default_value is not None and default_value != "" or not nullable:
                     widget.insert(0, str_value)
             
             # Add the widget to the grid and store it in field_entries
@@ -312,78 +292,92 @@ class CreateModal(tk.Toplevel):
         """Constrói dinamicamente uma query de inserção, compatível com diferentes bancos."""
         if not updated_values:
             return None
-        
         # Converte os tipos dos valores
-        updated_values = _convert_column_type(self.column_types, updated_values)
-        columns = ", ".join(updated_values.keys())
-        values = ", ".join(f"'{value}'" if isinstance(value, str) else "NULL" if value is None else str(value) for value in updated_values.values())
+        updated_values = _convert_column_type_for_string(self.column_types, updated_values)
+        columns = ", ".join([quote_identifier(self.db_type,key) for key in  updated_values.keys()])
+        values = ", ".join(updated_values.values()) 
         # Verifica se o banco suporta RETURNING
-        if self.db_type in ["postgresql", "mariadb", "oracle"]:
-            query = text(f"INSERT INTO {table_name} ({columns}) VALUES ({values}) RETURNING {self.column_name_key}")
-        elif self.db_type == "mysql":
-            query = text(f"INSERT INTO {table_name} ({columns}) VALUES ({values})")
+        if self.db_type == "postgresql":
+            query = text(f'INSERT INTO "{table_name}" ({columns}) VALUES ({values}) RETURNING {quote_identifier(self.db_type,self.column_name_key)}')
+        elif self.db_type in ["mysql","mariadb"]:
+            query = text(f"INSERT INTO `{table_name}` ({columns}) VALUES ({values})")
+        elif self.db_type in "oracle":
+            query = text(f"INSERT INTO \"{table_name}\" ({columns}) VALUES ({values}) RETURNING {quote_identifier(self.db_type,self.column_name_key)}")
         elif self.db_type == "sqlite":
             query = text(f"INSERT INTO {table_name} ({columns}) VALUES ({values})")
         elif self.db_type in ["mssql", "sqlserver", "sql server", "sqlserver"]:  # SQL Server usa OUTPUT INSERTED
-            query = text(f"INSERT INTO {table_name} ({columns}) OUTPUT INSERTED.{self.column_name_key} VALUES ({values})")
+            query = text(f"INSERT INTO [{table_name}] ({columns}) OUTPUT INSERTED.{quote_identifier(self.db_type,self.column_name_key)} VALUES ({values})")
         else:
             raise ValueError(f"Banco de dados {self.db_type} não suportado!")
         return query
 
-
     def _save_record(self):
         """Função genérica para salvar alterações em qualquer banco de dados."""
-        OK= ""
+        OK = ""
         try:
             self.button_salvar.config(state="disabled")
-          
+            
+            # Validação dos campos
             errors = self._validate_fields()
             if errors:
-                messagebox.showerror("Validação", "\n".join(errors))
+                error_message = "\n".join(errors)
+                messagebox.showerror("Erro de Validação", f"Por favor, corrija os seguintes erros:\n{error_message}")
                 self.button_salvar.config(state="normal")
                 return
             
-            updated_values ={} 
+            updated_values = {} 
             for col_name, entry in self.field_entries.items():
-                updated_values[col_name] = get_valor_idependente_entry(entry,tk,ttk)   
-           
+                updated_values[col_name] = get_valor_idependente_entry(entry, tk, ttk)
+            
             query = self.build_create_query(self.table_name, updated_values)
             if query is None:
-                messagebox.showinfo("Sem alterações", "Nenhuma alteração foi detectada.")
+                messagebox.showinfo("Sem Alterações", "Nenhuma alteração foi detectada. Nenhuma ação foi realizada.")
                 self.log_message("Nenhuma alteração foi detectada.", level="info")
                 return
-            print("query: ",query)
-            record_id= ""
+            
+            record_id = ""
             with self.engine.begin() as conn:
-                result =conn.execute(query)
-                # print(f"result: {result}")
+                result = conn.execute(query)
                 try:
+                    # Tenta obter o ID do registro atualizado
                     record_id = result.fetchone()[0] if result.returns_rows and result.rowcount > 0 else None
                 except Exception:
                     record_id = None  # Garante que não haverá erro ao acessar scalar()
             
-            self.log_message(f"Registro {record_id} atualizado com sucesso!", level="info")
+            # Atualiza o DataFrame com os novos valores
             df = self.df.copy()
-            new_row = pd.DataFrame([{**updated_values, self.column_name_key: record_id}])  # Cria um DataFrame com a nova linha
+            new_row = pd.DataFrame([{**updated_values, self.column_name_key: record_id}])
             df = pd.concat([df, new_row], ignore_index=True)
-                    
+            self.log_message(f"Registro {new_row} criado com sucesso!", level="info")
+            
+            # Notifica a mudança de dados se houver callback
             if self.on_data_change:
                 self.on_data_change(df)
             del df
             gc.collect()
             
-            OK = messagebox.showinfo("Sucesso", "Registro atualizado com sucesso!")
+            OK = messagebox.showinfo("Sucesso", "O registro foi criado com sucesso!")
+        
         except SQLAlchemyError as e:
-            self.log_message(f"Erro SQL ao atualizar o registro:{e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
-            messagebox.showerror("Erro de Banco de Dados", f"Falha ao salvar as alterações: {str(e)}")
+            # Erro específico de SQL
+            self.log_message(f"Erro ao atualizar o registro no banco de dados: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+            error_message = str(e)
+        
+            if "ForeignKeyViolation" in error_message:
+                msg = "Falha ao salvar devido à violação de chave estrangeira. Verifique se todos os dados estão corretos e se as referências entre tabelas estão consistentes."
+            elif "UniqueViolation" in error_message:
+                msg = "Falha ao salvar devido a uma violação de unicidade. O valor informado já existe no banco de dados."
+            else:
+                msg = f"Ocorreu um erro ao tentar salvar as alterações no banco de dados. Erro: {error_message}"
+            messagebox.showerror("Erro de Banco de Dados", msg)
             self.button_salvar.config(state="normal")
+        
         except Exception as e:
-            self.log_message(f"Erro ao atualizar o registro:{e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
-            messagebox.showerror("Erro", f"Falha ao salvar as alterações: {str(e)}")
+            # Erro genérico
+            self.log_message(f"Erro inesperado ao atualizar o registro: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+            messagebox.showerror("Erro", f"Ocorreu um erro inesperado ao salvar as alterações. Erro: {str(e)}")
             self.button_salvar.config(state="normal")
+        
+        # Confirma se o registro foi salvo com sucesso
         if OK.lower() == "ok":
             self.destroy()
-        
-        
-
-   

@@ -47,11 +47,11 @@ class DataAnalysisGUI:
         self.log_message("Criando abas de navegação.")
         self.basic_tab = BasicTab(
             self.notebook, self.config_manager, self.log_message,
-            self.db_type, self.engine, self.current_profile
+            self.db_type, self.engine, self.current_profile,self.database_var
         )
         self.advanced_tab = AdvancedTab(
-            self.notebook, self.config_manager, self.log_message,
-            self.db_type, self.engine, self.current_profile
+            notebook=self.notebook, config_manager=self.config_manager, log_message=self.log_message,
+            db_type=self.db_type, engine=self.engine, current_profile=self.current_profile,database_name=self.database_var.get()
         )
         self.saved_tab = SavedTab(
             self.notebook, self.config_manager, self.log_message,
@@ -89,5 +89,5 @@ class DataAnalysisGUI:
         
 
         # Destruir a janela principal
+        self.root.destroy() 
         gc.collect()
-        self.root.destroy()

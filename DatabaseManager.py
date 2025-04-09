@@ -8,7 +8,8 @@ class DatabaseManager:
    
     DB_URIS = {
         "MySQL": "mysql+pymysql://{user}:{password}@{host}:{port}/{database}",
-        "PostgreSQL": "postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}",
+        "PostgreSQL": "postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}?sslmode=require",
+        "pg": "postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}",
         "SQLite": "sqlite:///{database}",
         "SQL Server": "mssql+pyodbc:///?odbc_connect=DRIVER={{ODBC+Driver+17+for+SQL+Server}};SERVER={host},{port};DATABASE={database};UID={user};PWD={password};TrustServerCertificate=yes",
         "Oracle": "oracle+cx_oracle://{user}:{password}@{host}:{port}/?service_name={service}",
@@ -19,7 +20,6 @@ class DatabaseManager:
     def get_engine(db_type: str, config: Dict[str, Any]):
         """Cria e retorna um engine SQLAlchemy"""
         if db_type not in DatabaseManager.DB_URIS:
-            print(db_type)
             logger.error(f"Tipo de banco de dados não suportado: {db_type}")    
             raise ValueError(f"Tipo de banco de dados não suportado: {db_type}")
         try:
@@ -31,6 +31,7 @@ class DatabaseManager:
                 database=config.get("database", ""),
                 service=config.get("service", "xe")
             )
+            logger.debug(f"Conectando a URI: {uri}")  # Debug log for the URI (be cautious with sensitive data)
             return create_engine(uri)
         except Exception as e:
             logger.error(f"Erro ao criar engine para {db_type}: {e}")
@@ -47,13 +48,15 @@ class DatabaseManager:
             # Testa a conexão verificando se o banco responde
             with engine.connect() as connection:
                 connection.execute(text("SELECT 1"))  
-                print("Conexão estabelecida com sucesso")
-            logger.info(f"✅ Conexão estabelecida com sucesso para {db_type}.")
+                logger.info(f"✅ Conexão estabelecida com sucesso para {db_type}.")
             return session, engine
         except Exception as e:
-            logger.error(f"❌ Erro ao conectar ao banco {db_type}: {e}")
-            return None, None  # Retorna valores seguros para evitar erros
-
+            errorTxt = str(e)
+            logger.error(f"❌ Erro ao conectar ao banco {db_type}: {errorTxt}")
+            if db_type == "PostgreSQL":
+                if "SSL" in errorTxt:
+                    return DatabaseManager.connect("pg",config)
+            raise  # Re-raise the error to propagate the issue
 
 class DatabaseUtils:
     """Classe auxiliar para obter informações sobre bancos de dados"""
@@ -66,14 +69,15 @@ class DatabaseUtils:
         "Oracle": 1521,
         "MariaDB": 3306,
     }
+
     @staticmethod
     def test_connection(db_type: str, config: Dict[str, Any]) -> bool:
         """Testa a conectividade com o banco de dados fornecido."""
         try:
-            session_engine = DatabaseManager.connect(db_type, config)
-            session, engine = session_engine  # Extrai corretamente os valores
+            session, engine = DatabaseManager.connect(db_type, config)
+            # Testa a conexão
             with engine.connect() as connection:
-                connection.execute(text("SELECT 1"))  # Testa a conexão
+                connection.execute(text("SELECT 1"))  
             session.close()  # Fecha corretamente
             logger.info(f"✅ Conexão bem-sucedida com {db_type}.")
             return True

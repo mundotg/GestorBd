@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import TclError, ttk, messagebox
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 import pandas as pd
 from sqlalchemy import inspect
 
@@ -10,17 +10,23 @@ from components.analit_frame_table import AnalysisFrame
 class NavigationFrame(ttk.Frame):
     """Creates a navigation frame with pagination controls."""
     
-    def __init__(self, master: Any, prev_page: Callable, next_page: Callable, update_table: Callable, df: pd.DataFrame,engine: Any, table_name: str='',db_type:str ='PostgreSQL', on_data_change: Optional[Callable[[pd.DataFrame], None]] = None):
+    def __init__(self, master: Any,edit_table:bool,databse_name,log_message,query_executed, prev_page: Callable, next_page: Callable, update_table: Callable, df: pd.DataFrame,engine: Any, table_name,columns:Optional[dict[str, Any]] = None, enum_values: Optional[dict[str,Any]] = None,db_type:str ='PostgreSQL', on_data_change: Optional[Callable[[pd.DataFrame], None]] = None):
         super().__init__(master)
         self.prev_page = prev_page
         self.next_page = next_page
         self.update_table = update_table
+        self.log_message = log_message
+        self.columns = columns
+        self.query_executed = query_executed
+        self.enum_values = enum_values
         self.df = df  # Armazena o DataFrame
         self.on_data_change = on_data_change
         self.engine = engine
         self.table_name = table_name
         self.db_type = db_type
         self.root = master
+        self.edited = edit_table
+        self.databse_name = databse_name
 
         self._create_widgets()
     
@@ -42,7 +48,8 @@ class NavigationFrame(ttk.Frame):
         
         self.gestao_label = ttk.LabelFrame(self,text=f"__________ gestão de tabela________")
         # Botão para ver registros mal formados
-        self.invalid_button = ttk.Button(self.gestao_label, text="criar novo registro", command=self.cria_registro, style="DataTable.TButton")
+        state_value = 'normal' if self.edited else 'disabled'
+        self.invalid_button = ttk.Button(self.gestao_label, text="criar novo registro", command=self.cria_registro, style="DataTable.TButton",state=state_value)
         self.invalid_button.pack(side=tk.RIGHT, padx=5)
         self.analysis_button = ttk.Button(self.gestao_label, text="Analisar Tabela", command=self.open_analysis)
         self.analysis_button.pack(side=tk.RIGHT,padx=5)
@@ -73,12 +80,14 @@ class NavigationFrame(ttk.Frame):
             return
 
         # Cria a modal para inserção de registro
-        CreateModal( master=self,engine=self.engine, table_name=self.table_name, on_data_change=self.on_data_change,db_type=self.db_type, df=self.df,column_name_key=campo_primary_key)
+        CreateModal( master=self,engine=self.engine, table_name=self.table_name, on_data_change=self.on_data_change, db_type=self.db_type,
+                    df=self.df, column_name_key=campo_primary_key, 
+                    enum_values=self.enum_values, log_message=self.log_message, columns=self.columns, databse_name=self.databse_name)
 
     def open_analysis(self):
         analysis_window = tk.Toplevel()
         analysis_window.title("Análise Detalhada")
-        analysis_frame = AnalysisFrame(analysis_window, self.df)
+        analysis_frame = AnalysisFrame(analysis_window, self.df,self.engine,self.table_name,self.query_executed)
         analysis_frame.pack(fill=tk.BOTH, expand=True)
 
     def update_pagination(self, current_page: int, total_pages: int, length: int = None):

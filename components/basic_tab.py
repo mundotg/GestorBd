@@ -2,6 +2,7 @@
 import gc
 import threading
 import time
+from tkinter import font
 import traceback
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -9,12 +10,13 @@ from typing import Any, Callable
 from sqlalchemy import text, inspect
 import pandas as pd
 from DataFrameTable import DataFrameTable
+from components.ComboBoxComBusca import ComboBoxComBusca
 from config.DatabaseLoader import get_filter_condition
 from components.FilterContainer import FilterContainer
 from utils.validarText import get_query_string_threads, get_valor_idependente_entry,get_query_string
 
 class BasicTab:
-    def __init__(self, notebook: ttk.Notebook, config_manager: Any, log_message: Callable, db_type: str, engine: Any, current_profile: str):
+    def __init__(self, notebook: ttk.Notebook, config_manager: Any, log_message: Callable, db_type: str, engine: Any, current_profile: str,database_var):
         self.config_manager = config_manager
         self.log_message = log_message
         self.db_type = db_type.strip().lower()
@@ -26,12 +28,13 @@ class BasicTab:
         self.thread = None
         self.frame = ttk.Frame(notebook, padding=10)
         notebook.add(self.frame, text="Consulta Básica")
-
+        self.database_var = database_var
         self.table_widget = None
         self.tables = []
+        self.filtered_options = []
         self.column_filters = {}
         self.df = None
-
+        self.columns = {}
         self.setup_ui()
         self._table_lock = None
         self.load_table_names()
@@ -50,34 +53,76 @@ class BasicTab:
         
     def process_queue(self,tables):
         """Processa a fila de mensagens na thread principal."""
-      
-        self.table_combobox["values"] = tables  # Atualiza a GUI na thread principal
+        self.tables = tables
+        self.table_combobox["value"]=tables # Atualiza a GUI na thread principal
         self.table_count_var.config(text=f"{len(tables)} tabelas")
+    def filter_options(self, event=None):
+        search_term = self.selected_option.get().lower()
+        # Filtra as opções com base no que foi digitado
+        self.filtered_options = [option for option in self.tables if search_term in option.lower()]
+        # Atualiza as opções da ComboBox
+        self.table_combobox['values'] = self.filtered_options
         
     def setup_input_frame(self, parent):
+        self.title_font = font.Font(family="Helvetica", size=12, weight="bold")
+        self.normal_font = font.Font(family="Helvetica", size=10)
+        self.small_font = font.Font(family="Helvetica", size=9, slant="italic")
         input_frame = ttk.LabelFrame(parent, text="📌Seleção de Tabela")
         input_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         
-        table_controls = ttk.Frame(input_frame)
-        table_controls.pack(fill=tk.X, padx=5, pady=5)
+        table_controls = ttk.Frame(parent)
+        table_controls.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        # table_controls.pack(fill=tk.X, padx=5, pady=5)
         table_controls.columnconfigure(1, weight=1)
 
         ttk.Label(table_controls, text="Número de Tabelas:📊").grid(row=0, column=0, sticky=tk.W)
         self.table_count_var =ttk.Label(table_controls, text="Carregando...")
         self.table_count_var.grid(row=0, column=1, sticky=tk.W)
-        
+        self.selected_option = tk.StringVar()
         ttk.Label(table_controls, text="Nome da Tabela:🗃").grid(row=1, column=0, sticky=tk.W)
-        self.table_combobox = ttk.Combobox(table_controls, state="normal", values=[])
+        self.table_combobox = ttk.Combobox(table_controls, 
+                                     textvariable=self.selected_option, 
+                                     values=self.filtered_options, 
+                                     state="normal",
+                                     font=self.normal_font,
+                                     width=10)  # Largura ajustada para a janela
+        
+        # self.table_combobox.grid(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.table_combobox.bind("<KeyRelease>", self.filter_options)
         self.table_combobox.grid(row=1, column=1, sticky=tk.EW, padx=5)
         
-
         button_frame = ttk.Frame(table_controls)
         button_frame.grid(row=1, column=2, sticky=tk.E, padx=10)
-        
-        self.carregar_button = ttk.Button(button_frame, text="🔍Carregar", command=self.carregar_dados_assincrono)
+        self.style = ttk.Style()
+        self.style.configure(
+            'Green.TButton',
+            font=self.normal_font,
+            foreground='white',
+            background='#4CAF50'
+        )
+        # Em alguns temas do ttk (como o Windows), pode ser necessário usar map para garantir a cor
+        self.style.map(
+            'Green.TButton',
+            background=[('active', '#45a049'), ('!disabled', '#4CAF50')],
+            foreground=[('disabled', 'gray'), ('!disabled', 'white')]
+        )
+        self.carregar_button = ttk.Button(
+            button_frame,
+            text="🔍Carregar",
+            command=self.carregar_dados_assincrono,
+            style='Green.TButton'
+        )
         self.carregar_button.pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="🗑️Limpar", command=self.clear_entry).pack(side=tk.LEFT)
 
+        # Botão "Limpar" com estilo semelhante ou padrão
+        ttk.Button(
+            button_frame,
+            text="🗑️Limpar",
+            command=self.clear_entry,
+            style='Green.TButton'  # ou use outro estilo se quiser cores diferentes
+        ).pack(side=tk.LEFT)
+        self.databse_name = self.database_var.get()
     def setup_middle_frame(self, parent):
         middle_frame = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
         middle_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
@@ -85,16 +130,17 @@ class BasicTab:
         self.filter_container = FilterContainer(
             parent=middle_frame,
             log_message=self.log_message,
-            aplicar_filter=self.aplicar_filter,
             engine=self.engine,
+            columns=self.columns,
             enum_values=self.enum_values,
             status_var=self.status_var,
             table_combobox=self.table_combobox,
             db_type=self.db_type,
-            update_table_widget = self.carregar_dados_assincrono
+            update_table_widget = self.carregar_dados_assincrono,
+            database_name=self.databse_name
         )
         
-        self.table_frame = ttk.LabelFrame(middle_frame, text="Resultados")
+        self.table_frame = ttk.LabelFrame(middle_frame, text="Resultados: click duas vezes no item para visualizar")
         middle_frame.add(self.filter_container, weight=1)
         middle_frame.add(self.table_frame, weight=3)
         middle_frame.sashpos(0, 200)
@@ -138,23 +184,15 @@ class BasicTab:
         # Executa a função em uma nova thread
         thread = threading.Thread(target=_fetch_tables, daemon=True)
         thread.start()
-    def aplicar_filter(self,apply_filter_var:Any):
-        if hasattr(self, "aplicar_filter") and isinstance(apply_filter_var, tk.BooleanVar):
-            if not apply_filter_var.get():
-                apply_filter_var.set(True)
-                self.carregar_dados_assincrono()
-        else:
-            print("Erro: 'aplicar_filter' não está definido corretamente.")
     
     def carregar_dados_assincrono(self):
         if self.stop_event and not self.stop_event.is_set():
-            print("entrou para cancelar o carregamento")
             self.stop_event.set()
             if self.thread and self.thread.is_alive():
                 self.thread.join()
-            self.stop_event = None
-            self.carregar_button.config(text="🔍Carregar", state="normal")
-            return
+                self.stop_event = None
+                self.carregar_button.config(text="🔍Carregar", state="normal")
+                return
         def carregar():
             try:
                 self.carregar_button.config(text="❌Cancelar")
@@ -190,7 +228,7 @@ class BasicTab:
         self.status_var.set("Pronto")
         self.log_message("Combobox e filtros limpos.")
     def on_data_changed(self, df):
-        self.df = df
+        self.table_widget.update_table(df)
         self.status_var.set(f"Dados modificados: {len(df)} linhas")
         self.status_bar.config(text=f"Dados modificados: {len(df)} linhas")
         self.log_message("Dados modificados na tabela.")
@@ -231,11 +269,12 @@ class BasicTab:
                 self.root.after(0, lambda: messagebox.showerror("Erro", f"A tabela '{table_name}' não existe no banco de dados."))
                 self.carregar_button.config(text="🔍Carregar", state="normal")
                 return
-
-            base_query = f'SELECT * FROM "{table_name}"'
+            filter_column = self.filter_container.get_for_query()
+            
+            base_query = f'SELECT {filter_column if filter_column is not None else ""} FROM {self.validate_database(table_name)}'
             filters, params = [], {}
             columns = {col["name"]: col["type"] for col in inspect(self.engine).get_columns(table_name)}
-
+            print(" testnado  *****")
             for col_name, entry in self.filter_container.column_filters.items():
                 value = get_valor_idependente_entry(entry, tk, ttk)
                 if value is not None and value != "":
@@ -274,6 +313,26 @@ class BasicTab:
 
         except Exception as e:
             self.handle_error("Erro ao carregar dados", e)
+            self.carregar_button.config(text="🔍Carregar", state="normal")
+    def validate_database(self, table_name: str) -> str:
+        db_type = self.db_type.lower()
+
+        if db_type == "postgresql":
+            return f'"{table_name}"'  # PostgreSQL usa aspas duplas para identificadores
+
+        elif "mysql" in db_type:
+            return f"`{table_name}`"  # MySQL usa crases
+
+        elif "mssql" in db_type or "sql server" in db_type:
+            return f"[{table_name}]"  # SQL Server usa colchetes
+
+        elif "oracle" in db_type:
+            return table_name.upper()  # Oracle geralmente usa nomes em maiúsculas, sem aspas
+
+        else:
+            # SQLite usa aspas duplas, como PostgreSQL
+            return f'"{table_name}"'
+
     
     def update_table_widget(self, df, table_name):
         """ Atualiza ou recria o widget da tabela com os novos dados. """
@@ -283,6 +342,7 @@ class BasicTab:
 
         self.table_widget = DataFrameTable(
             master=self.table_frame,
+            databse_name=self.databse_name,
             df=df,
             rows_per_page=15,
             column_width=100,
@@ -290,8 +350,11 @@ class BasicTab:
             delete_enabled=True, 
             engine=self.engine,
             table_name=table_name,
+            log_message=self.log_message,
             on_data_change=self.on_data_changed,
-            db_type=self.db_type
+            db_type=self.db_type,
+            columns=self.filter_container.columns,
+            enum_values=self.filter_container.enum_values,
         )
         self.table_widget.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
