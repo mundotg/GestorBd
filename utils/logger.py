@@ -27,3 +27,7 @@ def log_message(self, message, level="info"):
             logger.warning(message)
             self.prefix = "[AVISO]"
             self.tag = "warning"
+        else:
+            logger.info(message)
+            self.prefix = "[INFO]"
+            self.tag = "info"
