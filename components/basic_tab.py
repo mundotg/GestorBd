@@ -192,7 +192,7 @@ class BasicTab:
                 self.thread.join()
                 self.stop_event = None
                 self.carregar_button.config(text="🔍Carregar", state="normal")
-                return
+            return
         def carregar():
             try:
                 self.carregar_button.config(text="❌Cancelar")

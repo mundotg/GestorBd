@@ -346,7 +346,7 @@ def get_query_string_threads(base_query, filters=None, max_rows=1000, db_type="m
 def _is_system_field(col_name: str, col_type: str, columns: list, db_type: str, table_name: str, engine, database_name, log_message) -> bool:
     """Determina se um campo é do sistema e deve ser ignorado."""
     
-    table_key = db_type + database_name + table_name
+    table_key = f'{db_type}{database_name}{table_name}'
     
     try:
         result = get_columns_by_table(table_key, ficheiro_name="tables_columns_system_field.pkl", log_message=log_message)

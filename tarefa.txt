@@ -7,3 +7,6 @@
 6 - cria e editar tem estar a funcionar
 7 - filtro de coluna a mostrar na tabela ex. select coluna_name,* from name_tabela;
 8 - sql avançado
+9 - fazer operação nas consulta.
+10 - navegar entre tabelas.
+11 - problema de termino da busca.
