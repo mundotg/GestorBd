@@ -2,11 +2,23 @@ import os
 import pickle
 
 def save_columns_to_file(columns_data, ficheiro_name="tables_columns_data.pkl", log_message=None):
-    """Salvar as colunas no arquivo usando Pickle (mais rápido e leve)."""
+    """Salvar as colunas no arquivo usando Pickle de forma prática e eficiente."""
     try:
+        # Verificar se o arquivo Pickle já existe
+        if os.path.exists(ficheiro_name):
+            # Carregar os dados existentes
+            with open(ficheiro_name, "rb") as f:
+                existing_data = pickle.load(f)
+        else:
+            # Se o arquivo não existir, inicializamos um novo dicionário
+            existing_data = {}
+        # Atualizar ou adicionar as tabelas no dicionário
+        existing_data.update(columns_data)  # Substitui ou adiciona as tabelas diretamente
+        # Salvar os dados de volta no arquivo Pickle
         with open(ficheiro_name, "wb") as f:
-            pickle.dump(columns_data, f)
+            pickle.dump(existing_data, f)
         return True
+
     except Exception as e:
         if log_message:
             log_message(f"Erro ao salvar colunas no arquivo: {e}", level="error")
@@ -37,7 +49,8 @@ def get_columns_by_table(table_name, ficheiro_name="tables_columns_data.pkl", lo
     try:
         with open(ficheiro_name, "rb") as f:
             data = pickle.load(f)  # Carrega todo o dicionário de tabelas
-            
+            # print(f"Tabelas disponíveis: {data.keys()}")
+            # print(f"tabela a pesquizar: {table_name}")
             if table_name in data:
                 return data[table_name]  # Retorna as colunas da tabela encontrada
             else:

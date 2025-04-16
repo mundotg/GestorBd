@@ -246,15 +246,15 @@ class FilterContainer(ttk.LabelFrame):
             return
         
         self.create_frame_filter_scroll()
-
+        table_name = f'{self.db_type}{self.database_name}{self.table_name}'
         try:
-            self.columns = get_columns_by_table(self.db_type+self.database_name+self.table_name, "tables_columns_data.pkl", log_message=self.log_message)
+            self.columns = get_columns_by_table(table_name, "tables_columns_data.pkl", log_message=self.log_message)
             if self.columns:
                 columns = self.columns
             else:
                 inspector = inspect(self.engine)
                 self.columns= inspector.get_columns(self.table_name, schema=None)
-                if save_columns_to_file({self.db_type+self.database_name+self.table_name: self.columns}, "tables_columns_data.pkl", log_message=self.log_message):
+                if save_columns_to_file({table_name: self.columns}, "tables_columns_data.pkl", log_message=self.log_message):
                     self.log_message("salvo com sucesso","info")
                 columns = self.columns
             # print(columns)    
