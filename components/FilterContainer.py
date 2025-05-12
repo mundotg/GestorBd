@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
 import traceback
 from typing import Any
 from sqlalchemy import inspect, text
 import tkinter as tk
 from tkinter import ttk
-from components.Data_wiget2 import DateTimeEntry
 from components.DataWidget import DatabaseDateWidget
 from components.filter_column_show_in_consulta import FilterColumnShowInConsulta
 from config.salavarInfoAllColumn import get_columns_by_table, save_columns_to_file

@@ -1,4 +1,4 @@
-import gc
+# -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
@@ -391,7 +391,6 @@ class CreateModal(tk.Toplevel):
             if self.on_data_change:
                 self.on_data_change(df)
             del df
-            gc.collect()
             
             OK = messagebox.showinfo("Sucesso", "O registro foi criado com sucesso!")
         
