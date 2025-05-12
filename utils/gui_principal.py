@@ -1,7 +1,7 @@
 from tkinter import messagebox, simpledialog
 import tkinter as tk
 import traceback
-from DatabaseManager import DatabaseManager, DatabaseUtils
+from config.DatabaseManager import DatabaseManager, DatabaseUtils
 from utils.logger import log_message as logmessage
 
 def new_profile(self):

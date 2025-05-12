@@ -85,8 +85,8 @@ class DateTimeEntry(ttk.Frame):
         if hasattr(self, 'date_entry') and self.date_entry:
             self.date_entry.bind("<<DateEntrySelected>>", self.update_entry)
 
-        if hasattr(self, 'time_entry') and self.time_entry and hasattr(self.time_entry, 'spinbox'):
-            if self.time_entry.spinbox.winfo_exists():
+        if hasattr(self, 'time_entry') and self.time_entry:
+            if hasattr(self.time_entry, 'change_event'):
                 self.time_entry.change_event(self.update_entry)
 
         # Inicializa com o valor padrão

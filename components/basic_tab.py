@@ -1,5 +1,4 @@
 
-import gc
 import threading
 import time
 from tkinter import font
@@ -10,8 +9,7 @@ from typing import Any, Callable
 from sqlalchemy import text, inspect
 import pandas as pd
 from DataFrameTable import DataFrameTable
-from components.ComboBoxComBusca import ComboBoxComBusca
-from config.DatabaseLoader import get_filter_condition
+from config.DatabaseLoader import get_filter_condition_with_operation
 from components.FilterContainer import FilterContainer
 from utils.validarText import get_query_string_threads, get_valor_idependente_entry,get_query_string
 
@@ -190,7 +188,7 @@ class BasicTab:
             self.stop_event.set()
             if self.thread and self.thread.is_alive():
                 self.thread.join()
-                self.stop_event = None
+                self.stop_331_event = None
                 self.carregar_button.config(text="🔍Carregar", state="normal")
             return
         def carregar():
@@ -271,14 +269,22 @@ class BasicTab:
                 return
             filter_column = self.filter_container.get_for_query()
             
-            base_query = f'SELECT {filter_column if filter_column is not None else ""} FROM {self.validate_database(table_name)}'
+            base_query = f'SELECT {filter_column if filter_column is not None else "*"} FROM {self.validate_database(table_name)}'
             filters, params = [], {}
             columns = {col["name"]: col["type"] for col in inspect(self.engine).get_columns(table_name)}
-            print(" testnado  *****")
+            
             for col_name, entry in self.filter_container.column_filters.items():
                 value = get_valor_idependente_entry(entry, tk, ttk)
+                data_default_hover= self.filter_container.example_text.get(col_name, '')
+                if data_default_hover == value:
+                    value = None
+                    
                 if value is not None and value != "":
-                    filter_condition = get_filter_condition(self, col_name, columns.get(col_name, ""), value, params, self.db_type)
+                    operation = self.filter_container.column_filters_combobox_operation[col_name].get()
+                    value_otheir_between = None
+                    if operation == "Entre":
+                        value_otheir_between = get_valor_idependente_entry(self.filter_container.column_filters_entry_between[col_name], tk, ttk)
+                    filter_condition = get_filter_condition_with_operation(self, col_name, columns.get(col_name, ""), value, params, self.db_type, operation ,value_otheir_between)
                     if filter_condition:
                         filters.append(filter_condition)
 
@@ -287,27 +293,34 @@ class BasicTab:
 
             try:
                 query_string = get_query_string(base_query, filters, max_rows, self.db_type)
-
+                self.status_var.set(f"query string: {query_string}")
+                self.log_message(f"Executando query: {query_string}")
+                # print("Query gerada:", query_string)
                 with self.engine.connect() as conn:
                     result = conn.execute(text(query_string), params)
                     df = pd.DataFrame(result.fetchall(), columns=result.keys())
 
-                self.root.after(0, lambda: self.update_table_widget(df, table_name))
+                self.root.after(0, lambda: self.update_table_widget(df, table_name,query_string))
 
             except Exception as e:
                 self.handle_error("Erro ao carregar dados", e)
 
             # self.root.after(0, lambda: self.update_table_widget(df, table_name))
-            self.status_var.set(f"Carregados {len(df)} de {max_rows} linhas possíveis.")
-            print(f"Carregados {len(df)} de {max_rows} linhas possíveis.")
+            try:
+                self.status_var.set(f"Carregados {len(df)} de {max_rows} linhas possíveis.")
+            except NameError:
+                self.status_var.set("Erro ao carregar dados.")
 
             if len(df) < max_rows:
                 self.carregar_button.config(text="🔍Carregar", state="normal")
                 return
-
             unique_cols = [col for col in df.columns if df[col].is_unique]
             campo_chave = unique_cols[0] if unique_cols else df.columns[0]
             valor_ultima_linha = df.iloc[-1][campo_chave]
+            if unique_cols:
+                print(f"unique_cols={unique_cols[0]} e campo_chave={campo_chave} valor_ultima_linha={valor_ultima_linha}")
+            else:
+                print(f"A lista unique_cols está vazia. e campo_chave={campo_chave} valor_ultima_linha={valor_ultima_linha}")
 
             threading.Thread(target=self.fetch_remaining_rows, args=(base_query, filters, max_rows, campo_chave, valor_ultima_linha,params,df), daemon=True).start()
 
@@ -315,7 +328,7 @@ class BasicTab:
             self.handle_error("Erro ao carregar dados", e)
             self.carregar_button.config(text="🔍Carregar", state="normal")
     def validate_database(self, table_name: str) -> str:
-        db_type = self.db_type.lower()
+        db_type = self.db_type
 
         if db_type == "postgresql":
             return f'"{table_name}"'  # PostgreSQL usa aspas duplas para identificadores
@@ -334,29 +347,30 @@ class BasicTab:
             return f'"{table_name}"'
 
     
-    def update_table_widget(self, df, table_name):
+    def update_table_widget(self, df, table_name,query_executed=None):
         """ Atualiza ou recria o widget da tabela com os novos dados. """
         if self.table_widget:
-            self.table_widget.destroy()
+            self.table_widget.update_table(df,columns=self.filter_container.columns,table_name=table_name, enum_values=self.filter_container.enum_values, query_executed=query_executed)
         
-
-        self.table_widget = DataFrameTable(
-            master=self.table_frame,
-            databse_name=self.databse_name,
-            df=df,
-            rows_per_page=15,
-            column_width=100,
-            edit_enabled=True, 
-            delete_enabled=True, 
-            engine=self.engine,
-            table_name=table_name,
-            log_message=self.log_message,
-            on_data_change=self.on_data_changed,
-            db_type=self.db_type,
-            columns=self.filter_container.columns,
-            enum_values=self.filter_container.enum_values,
-        )
-        self.table_widget.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        else:
+            self.table_widget = DataFrameTable(
+                master=self.table_frame,
+                databse_name=self.databse_name,
+                df=df,
+                rows_per_page=50,
+                column_width=100,
+                edit_enabled=True, 
+                delete_enabled=True, 
+                engine=self.engine,
+                table_name=table_name,
+                log_message=self.log_message,
+                on_data_change=self.on_data_changed,
+                db_type=self.db_type,
+                columns=self.filter_container.columns,
+                enum_values=self.filter_container.enum_values,
+                query_executed =query_executed
+            )
+            self.table_widget.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
     
     def fetch_remaining_rows(self, base_query, filters, max_rows, campo_chave, valor_ultima_linha, params,f_df):
@@ -371,13 +385,12 @@ class BasicTab:
                 break
             cont += 1
             query_string = get_query_string_threads(base_query, filters, max_rows, self.db_type, campo_chave, valor_ultima_linha)
+            # print("Query gerada na threads:", query_string)
 
             try:
                 with self.engine.connect() as conn:
                     result = conn.execute(text(query_string), params)
                     df = pd.DataFrame(result.fetchall(), columns=result.keys())
-
-                print(f"Tamanho = {len(df)} | Último ID = {valor_ultima_linha}")
 
                 if df.empty:
                     break  # Sai do loop se não houver mais dados
@@ -386,24 +399,23 @@ class BasicTab:
                 if concat_df.empty:
                     concat_df = df 
                 else:
+                    new_valor_ultima_linha = df.iloc[-1][campo_chave]
+                    if new_valor_ultima_linha == valor_ultima_linha:
+                        break
+                    valor_ultima_linha = new_valor_ultima_linha
+                    n_linha = len(df) 
                     concat_df = pd.concat([concat_df, df], ignore_index=True).drop_duplicates()
-                    
-
                 # Atualiza UI a cada 10 iterações para evitar bloqueio da interface
-                valor_ultima_linha = df[campo_chave].iloc[-1] if campo_chave in df.columns else None
-                n_linha = len(df)
-                
                 
                 if  n_linha < max_rows:
                     break  
-                if cont == 10:
+                if cont == 20:
                     self.root.after(0, self.update_ui, concat_df)
                     cont = 0
                     del concat_df
                     concat_df = df.copy()
                     del df
-                    gc.collect()
-
+                # print(f"Thread ativa? {valor_ultima_linha}")
                 # Atualiza o valor da última linha para continuar a busca
                 # Sai do loop se o último lote de dados for menor que `max_rows`
 

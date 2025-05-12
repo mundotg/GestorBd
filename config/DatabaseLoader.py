@@ -18,20 +18,6 @@ class DatabaseLoader:
         self.connection = connection
         self.df = None  # DataFrame para armazenar os dados carregados
 
-    def load_data(self, table_name: str):
-        """Carrega os dados de uma tabela usando Pandas"""
-        if not table_name:
-            messagebox.showerror("Erro", "Digite um nome de tabela válido.")
-            return
-
-        try:
-            query = f"SELECT * FROM {table_name}"
-            self.df = pd.read_sql(query, self.connection)  # Carregamento usando Pandas
-            messagebox.showinfo("Sucesso", f"Dados carregados da tabela: {table_name}")
-            print(self.df.head())  # Exibir primeiras linhas para depuração
-        except Exception as e:
-            messagebox.showerror("Erro", f"Não foi possível carregar os dados: {e}")
-
 def parse_date(date_value, col_type_str):
     # Formatos de data permitidos
     DATA_TYPE_FORMATS = {
@@ -68,7 +54,7 @@ def parse_date(date_value, col_type_str):
     raise ValueError(f"Formato inválido para '{date_value}'. Formatos permitidos: {', '.join(formatos_alternativos)}")
 
 
-def get_filter_condition(self, col_name, col_type, value, params, db_type="postgres"):
+def get_filter_condition(self, col_name, col_type, value, params, db_type="postgres",operation="" ,value_otheir_between=""):
     """
     Retorna a condição SQL correta para a coluna com base no tipo de dado e no banco de dados.
     """
@@ -141,6 +127,116 @@ def get_filter_condition(self, col_name, col_type, value, params, db_type="postg
 
     except (ValueError, TypeError) as e:
         raise ValueError(f"Erro ao processar '{col_name}': {e}")
+    
+    
+    
+def get_filter_condition_with_operation(self, col_name, col_type, value, params, db_type="postgres", operation="", value_otheir_between=""):
+    """
+    Retorna a condição SQL correta para a coluna com base no tipo de dado, operação e no banco de dados.
+    """
+    try:
+        value = value.strip()
+        if value == "" and operation not in ["Entre"]:
+            raise ValueError(f"Valor inválido para '{col_name}': campo não pode estar vazio.")
+
+        col_type_str = str(col_type).lower()
+        db_type_lower = db_type.lower()
+        if db_type_lower in ["postgresql", "postgres"]:
+            col_name_escaped = f'"{col_name}"'
+        else:
+            col_name_escaped = col_name
+
+        # 🔹 Suporte para Enum
+        if self.enum_values.get(col_name) not in [None, "", []]:
+            params[col_name] = value
+            return f"{col_name_escaped} = :{col_name}"
+
+        # 🔹 Suporte para UUID
+        if "uuid" in col_type_str:
+            params[col_name] =  str(value)
+            return f"{col_name_escaped} = :{col_name}"
+
+        # 🔹 Suporte para Booleanos
+        if "boolean" in col_type_str or isinstance(col_type, Boolean):
+            boolean_map = {"true": True, "1": True, "yes": True, "sim": True,
+                           "false": False, "0": False, "no": False, "não": False}
+            if value.lower() not in boolean_map:
+                raise ValueError(f"Valor inválido para booleano na coluna '{col_name}'.")
+            params[col_name] = boolean_map[value.lower()]
+            return f"{col_name_escaped} = :{col_name}"
+
+        # 🔹 Suporte para Datas/Timestamps
+        is_date_type = any(t in col_type_str for t in ["date", "timestamp", "time"]) or isinstance(col_type, (Date, DateTime))
+        is_number_type = any(t in col_type_str for t in ["numeric", "integer"]) or isinstance(col_type, Numeric)
+        is_text_type = any(t in col_type_str for t in ["text", "char", "varchar"])
+
+        def basic_op(field):
+            op_map = {
+                "=": "=",
+                "!=": "!=",
+                "<": "<",
+                "<=": "<=",
+                ">": ">",
+                ">=": ">="
+            }
+            if operation in op_map:
+                params[col_name] = float(value) if is_number_type else value
+                return f"{field} {op_map[operation]} :{col_name}"
+            elif operation == "Entre":
+                if not value_otheir_between.strip():
+                    raise ValueError(f"Valor final ausente para operação 'Entre' na coluna '{col_name}'.")
+                val1 = float(value) if is_number_type else value
+                val2 = float(value_otheir_between) if is_number_type else value_otheir_between
+                params[f"{col_name}_min"] = val1
+                params[f"{col_name}_max"] = val2
+                return f"{field} BETWEEN :{col_name}_min AND :{col_name}_max"
+            elif operation == "Contém" and (is_text_type or "json" in col_type_str or is_date_type):
+                params[col_name] = f"%{value}%"
+                return f"{field} LIKE :{col_name}"
+            elif operation == "Não Contém" and (is_text_type or "json" in col_type_str or is_date_type):
+                params[col_name] = f"%{value}%"
+                return f"{field} NOT LIKE :{col_name}"
+            elif operation == "Antes de" and is_date_type:
+                params[col_name] = value
+                return f"{field} < :{col_name}"
+            elif operation == "Depois de" and is_date_type:
+                params[col_name] = value
+                return f"{field} > :{col_name}"
+            else:
+                raise ValueError(f"Operação '{operation}' não suportada para o tipo de dado da coluna '{col_name}'.")
+
+
+        # 🔹 Conversões especiais
+        if "json" in col_type_str:
+            json_field = f"{col_name_escaped}::TEXT" if db_type_lower in ["postgresql", "postgres"] else f"CAST({col_name_escaped} AS TEXT)"
+            return basic_op(json_field)
+
+        if is_date_type:
+            if db_type_lower in ["postgresql", "postgres"]:
+                date_field = f"CAST({col_name_escaped} AS TEXT)"
+            elif db_type_lower in ["mysql"]:
+                date_field = f"CONVERT({col_name_escaped}, CHAR)"
+            elif db_type_lower in ["mssl", "sql server"]:
+                date_field = f"CONVERT(CHAR, {col_name_escaped}, 23)"  # Estilo 23 = 'YYYY-MM-DD'
+            elif db_type_lower == "sqlite":
+                date_field = f"{col_name_escaped} LIKE :{col_name}"  # No SQLite, colunas de data já são strings
+            else:
+                date_field = f"CAST({col_name_escaped} AS TEXT)" if db_type_lower in ["postgresql", "postgres"] else col_name_escaped
+            return basic_op(date_field)
+
+        if is_number_type:
+            return basic_op(col_name_escaped)
+
+        if is_text_type:
+            return basic_op(col_name_escaped)
+
+        raise TypeError(f"Tipo de coluna '{col_type}' não suportado para filtros.")
+
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Erro ao processar '{col_name}': {e}")
+    
+
+
 
 def pesquisar_in_db(engine, db_type, campo_primary_key, primary_key_value, table_name, selected_row_index, text, log_message):
     """Busca a chave primária no banco de dados se ela não estiver disponível no DataFrame."""

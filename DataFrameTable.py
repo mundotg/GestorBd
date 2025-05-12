@@ -94,19 +94,43 @@ class DataFrameTable(ttk.Frame):
         except Exception as e:
             self.log_message( f"Erro ao criar estilos: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
 
-    def update_table(self, df: Optional[pd.DataFrame] = None) -> None:
+    def update_table(self, df: Optional[pd.DataFrame] = None,  
+                     columns: Optional[dict] = None,  enum_values: Optional[dict] = None,  on_data_change: Optional[callable] = None, 
+                    table_name: Optional[str] = None, query_executed: str = "") -> None:
+        """Atualiza a tabela e seus dados internos, apenas se novos valores forem fornecidos."""
         try:
+            # Atualiza apenas se valores novos forem passados
+            if query_executed:
+                self.query_executed = query_executed
+                
+            if table_name:
+                self.table_name = table_name
+                self.navigation_frame.table_name = table_name
+                # self.treeview_frame.query_executed = query_executed
+                
+            if on_data_change:
+                self.on_data_change = on_data_change
+            if enum_values is not None:
+                self.enum_values = enum_values.copy()
+            if columns is not None:
+                self.columns = columns.copy()
+                self.navigation_frame.columns = self.columns
+
             if df is not None:
                 self.df = df.copy()
-                del df
                 self.total_pages = self._calculate_total_pages()
-                self.current_page = min(self.current_page, self.total_pages - 1)
+                self.current_page = min(self.current_page, max(self.total_pages - 1, 0))
 
-            self.treeview_frame.update_table(self.df, self.current_page, self.rows_per_page)
-            self.navigation_frame.update_pagination(self.current_page, self.total_pages, len(self.df))
+                # Só atualiza a tabela se o DataFrame foi alterado
+                self.treeview_frame.update_table(self.df, self.current_page, self.rows_per_page)
+                self.navigation_frame.update_pagination(self.current_page, self.total_pages, len(self.df))
 
         except Exception as e:
-            self.log_message( f"Erro ao atualizar tabela: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+            self.log_message(
+                f"Erro ao atualizar tabela: {e} ({type(e).__name__})\n{traceback.format_exc()}",
+                level="error"
+            )
+
 
     def prev_page(self) -> None:
         if self.current_page > 0:
@@ -118,17 +142,14 @@ class DataFrameTable(ttk.Frame):
             self.current_page += 1
             self.update_table()
 
-    def show_edit_modal(self, index=None,_fechar_modal=None) -> None:
-        """Exibe um modal para editar a linha selecionada."""
+    def show_edit_modal(self, index=None, _fechar_modal=None) -> None:
+        """Exibe um modal para editar a linha selecionada ou atualiza a existente."""
         try:
             if index is not None:
                 self.selected_row_index = int(index)
 
-            if self.modal_edit:
-                self.modal_edit.destroy()
-
             if self.selected_row_index is None or self.selected_row_index >= len(self.df):
-                self.log_message( "Nenhuma linha válida selecionada para edição.", level="warning")
+                self.log_message("Nenhuma linha válida selecionada para edição.", level="warning")
                 return
 
             campo_primary_key = None
@@ -142,27 +163,60 @@ class DataFrameTable(ttk.Frame):
             if not campo_primary_key:
                 unique_cols = [col for col in self.df.columns if self.df[col].is_unique]
                 campo_primary_key = unique_cols[0] if unique_cols else self.df.columns[0]
+            
             primary_key_value = None
-            if campo_primary_key  in self.df.columns:
+            if campo_primary_key in self.df.columns:
                 primary_key_value = self.df.at[self.selected_row_index, campo_primary_key]
 
             if primary_key_value is None:
-                primary_key_value= pesquisar_in_db(self.engine, self.db_type, campo_primary_key, primary_key_value, self.table_name, self.selected_row_index, text, self.log_message)
-                self.log_message( f"Chave primária `{campo_primary_key}` não encontrada na linha {self.selected_row_index}.", level="error")
+                primary_key_value = pesquisar_in_db(self.engine, self.db_type, campo_primary_key, primary_key_value, 
+                                                    self.table_name, self.selected_row_index, text, self.log_message)
+                self.log_message(f"Chave primária `{campo_primary_key}` não encontrada na linha {self.selected_row_index}.", level="error")
                 if primary_key_value is None:
                     return
-
-            self.log_message( f"Abrindo modal de edição para linha {self.selected_row_index} (Campo: {campo_primary_key}, ID: {primary_key_value})")
-
+            # Se não existe modal ou é para uma tabela diferente, cria um novo
+            self.log_message(f"Abrindo modal de edição para linha {self.selected_row_index} (Campo: {campo_primary_key}, ID: {primary_key_value})")
+            if self.modal_edit :
+                self.modal_edit.destroy()
+                self.modal_edit = None
+                del self.modal_edit
+                
+                # Show loading indicator
+            # loading_frame = ttk.Frame(self)
+            # loading_frame.pack(expand=True, fill=tk.BOTH)
+            
+            # ttk.Label(
+            #     loading_frame,
+            #     text=f"Carregando dados da tabela {self.table_name}...",
+            #     font=("Arial", 12)
+            # ).pack(expand=True)
+            
+            # progress = ttk.Progressbar(loading_frame, mode="indeterminate")
+            # progress.pack(fill=tk.X, padx=50, pady=20)
+            # progress.start()
+               
+                # Atualiza o modal existente
             self.modal_edit = EditModal(
-                master=self, engine=self.engine, df=self.df, row_index=self.selected_row_index,is_opened_callback=_fechar_modal,
-                name_campo_primary_key=campo_primary_key, primary_key_value=primary_key_value,db_type=self.db_type,
-                table_name=self.table_name, on_data_change=self.on_data_change, edit_enabled=self.edit_enabled,
-                column_types=self.columns, enum_values=self.enum_values, log_message=self.log_message,databse_name =self.databse_name,
+                master=self, 
+                engine=self.engine, 
+                df=self.df, 
+                row_index=self.selected_row_index,
+                is_opened_callback=_fechar_modal,
+                name_campo_primary_key=campo_primary_key, 
+                primary_key_value=primary_key_value,
+                db_type=self.db_type,
+                table_name=self.table_name, 
+                on_data_change=self.on_data_change, 
+                edit_enabled=self.edit_enabled,
+                column_types=self.columns, 
+                enum_values=self.enum_values, 
+                log_message=self.log_message,
+                databse_name=self.databse_name,
             )
 
         except Exception as e:
-            self.log_message( f"Erro ao abrir modal de edição: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+            self.log_message(f"Erro ao abrir modal de edição: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
+            
     def update_table_for_search(self, df: Optional[pd.DataFrame] = None) -> None:
         try:
             if df is not None and not df.empty:
@@ -182,7 +236,7 @@ class DataFrameTable(ttk.Frame):
             n_linha = len(self.df) if hasattr(self, "df") and isinstance(self.df, pd.DataFrame) else 0
             self.navigation_frame.update_pagination(self.current_page, self.total_pages, n_linha)
             
-            self.log_message( "Tabela e paginação atualizadas com sucesso.")
+            # self.log_message( "Tabela e paginação atualizadas com sucesso.")
         
         except Exception as e:
             self.log_message( f"Erro ao atualizar tabela: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")

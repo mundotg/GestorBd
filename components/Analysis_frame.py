@@ -1,125 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter import filedialog
-
-class HelpWindow(tk.Toplevel):
-    """
-    Janela auxiliar que fornece explicações detalhadas das funcionalidades
-    do aplicativo através de opções selecionáveis.
-    """
-    
-    def __init__(self, parent, title="Ajuda e Informações"):
-        super().__init__(parent)
-        self.parent = parent
-        
-        # Configurações da janela
-        self.title(title)
-        self.geometry("700x500")
-        self.minsize(500, 400)
-        self.transient(parent)  # Faz esta janela relacionada à janela principal
-        self.grab_set()         # Força o foco nesta janela
-        
-        # Torna a janela responsiva
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        
-        # Cria o frame principal
-        main_frame = ttk.Frame(self)
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=3)
-        main_frame.rowconfigure(0, weight=1)
-        
-        # Painel esquerdo com lista de opções
-        self.options_frame = ttk.LabelFrame(main_frame, text="Funcionalidades")
-        self.options_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
-        
-        # Painel direito com detalhes
-        details_frame = ttk.LabelFrame(main_frame, text="Detalhes")
-        details_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=5)
-        details_frame.columnconfigure(0, weight=1)
-        details_frame.rowconfigure(0, weight=1)
-        
-        # Área de texto para detalhes
-        self.details_text = tk.Text(details_frame, wrap="word", padx=10, pady=10)
-        self.details_text.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        
-        # Scrollbar para texto de detalhes
-        scrollbar = ttk.Scrollbar(details_frame, orient="vertical", command=self.details_text.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.details_text.configure(yscrollcommand=scrollbar.set)
-        
-        # Botões de controle
-        button_frame = ttk.Frame(self)
-        button_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
-        
-        close_button = ttk.Button(button_frame, text="Fechar", command=self.destroy)
-        close_button.pack(side="right", padx=5)
-        
-        # Inicializar opções vazias
-        self.options = []
-        
-    def add_options(self, options_dict):
-        """
-        Adiciona opções à lista.
-        
-        Args:
-            options_dict: Dicionário no formato {nome_opção: {"texto": "texto detalhado", "imagem": None}}
-        """
-        self.options = options_dict
-        
-        # Limpar opções existentes
-        for widget in self.options_frame.winfo_children():
-            widget.destroy()
-            
-        # Criar uma lista com as opções
-        for i, (option_name, _) in enumerate(self.options.items()):
-            option_btn = ttk.Button(
-                self.options_frame, 
-                text=option_name, 
-                command=lambda name=option_name: self.show_option_details(name)
-            )
-            option_btn.pack(fill="x", padx=5, pady=2)
-            
-        # Mostrar a primeira opção por padrão se existir
-        if self.options:
-            first_option = list(self.options.keys())[0]
-            self.show_option_details(first_option)
-    
-    def show_option_details(self, option_name):
-        """
-        Mostra os detalhes da opção selecionada.
-        
-        Args:
-            option_name: Nome da opção para mostrar os detalhes
-        """
-        if option_name in self.options:
-            details = self.options[option_name]
-            
-            # Limpar área de texto
-            self.details_text.config(state=tk.NORMAL)
-            self.details_text.delete(1.0, tk.END)
-            
-            # Inserir título
-            self.details_text.insert(tk.END, f"{option_name}\n\n", "title")
-            self.details_text.tag_configure("title", font=("Arial", 14, "bold"))
-            
-            # Inserir detalhes
-            self.details_text.insert(tk.END, details["texto"])
-            
-            # Desativar edição
-            self.details_text.config(state=tk.DISABLED)
-            
-            # Mostrar imagem se disponível
-            # Implementação futura
-        else:
-            messagebox.showwarning("Opção não encontrada", f"A opção '{option_name}' não existe.")
-
+from const.const_import import help_content
+from components.HelpWindow import HelpWindow
 # Exemplo de uso com AnalysisFrame
 class AnalysisFrame(ttk.Frame):
     """Frame para análise detalhada da tabela com layout responsivo."""
 
-    def __init__(self, master, df):
+    def __init__(self, master, df,log_message=None):
         super().__init__(master)
         self.df = df
         self.columnconfigure(0, weight=1)
@@ -127,133 +15,8 @@ class AnalysisFrame(ttk.Frame):
         self._create_widgets()
         
         # Preparar conteúdo de ajuda
-        self.help_content = {
-            "Resumo Estatístico": {
-                "texto": """O recurso de Resumo Estatístico calcula e exibe estatísticas descritivas para todas as colunas numéricas do seu conjunto de dados:
-
-• Contagem (count): Número de valores não nulos
-• Média (mean): Valor médio dos dados
-• Desvio Padrão (std): Dispersão dos valores em relação à média
-• Mínimo (min): Menor valor da coluna
-• 25% (25%): Primeiro quartil - 25% dos dados estão abaixo deste valor
-• 50% (50%): Mediana - valor central da coluna
-• 75% (75%): Terceiro quartil - 75% dos dados estão abaixo deste valor
-• Máximo (max): Maior valor da coluna
-
-Este recurso é útil para entender rapidamente a distribuição dos seus dados numéricos e identificar possíveis valores atípicos.
-
-Para colunas não numéricas, o resumo mostrará informações básicas como contagem, frequência e valores únicos.
-""",
-                "imagem": None
-            },
-            "Ver Duplicatas": {
-                "texto": """A função Ver Duplicatas identifica e exibe todas as linhas duplicadas presentes no seu conjunto de dados.
-
-Duas ou mais linhas são consideradas duplicatas quando possuem exatamente os mesmos valores em todas as colunas. Por padrão, todas as instâncias das linhas duplicadas são mostradas, incluindo a primeira ocorrência.
-
-Quando usar:
-• Para identificar erros de entrada de dados
-• Para detectar registros duplicados antes de realizar análises
-• Para limpeza de dados
-
-Se nenhuma duplicata for encontrada, uma mensagem "Nenhum registro duplicado encontrado" será exibida.
-
-Dica: Após identificar duplicatas, você pode considerar removê-las do seu conjunto de dados antes de prosseguir com análises mais complexas.
-""",
-                "imagem": None
-            },
-            "Registros Mal Formados": {
-                "texto": """A função Registros Mal Formados detecta e exibe linhas que contêm:
-
-• Valores nulos (NaN, None, NULL)
-• Strings vazias ("")
-• Strings que contêm apenas espaços em branco
-
-Esta função é essencial para identificar dados incompletos ou mal formatados que podem afetar a qualidade da sua análise.
-
-Quando usar:
-• Antes de iniciar qualquer análise de dados
-• Como parte do processo de limpeza de dados
-• Para identificar padrões de dados ausentes
-
-Se não houver registros mal formados, uma mensagem "Nenhum registro mal formado encontrado" será exibida.
-
-Dica: Considere estratégias para lidar com registros mal formados, como remoção, imputação (preenchimento) de valores ausentes, ou correção dos dados.
-""",
-                "imagem": None
-            },
-            "Tipos de Dados": {
-                "texto": """A função Tipos de Dados mostra o tipo de dado de cada coluna no seu conjunto de dados:
-
-• int64: Números inteiros
-• float64: Números decimais
-• object: Principalmente texto (strings) ou dados mistos
-• datetime64: Datas e horários
-• bool: Valores booleanos (True/False)
-• category: Dados categóricos
-
-Conhecer os tipos de dados é fundamental porque:
-• Influencia quais operações são possíveis em cada coluna
-• Afeta o desempenho e o consumo de memória
-• Determina quais métodos de visualização são apropriados
-
-Dica: Algumas operações requerem conversão de tipos. Por exemplo, você não pode realizar cálculos numéricos em colunas do tipo 'object' sem primeiro convertê-las para um tipo numérico.
-""",
-                "imagem": None
-            },
-            "Valores Únicos": {
-                "texto": """A função Valores Únicos conta e exibe o número de valores distintos em cada coluna do seu conjunto de dados.
-
-Por exemplo, se uma coluna "Estado" contém os valores ["SP", "RJ", "SP", "MG", "SP"], o número de valores únicos será 3.
-
-Esta informação é útil para:
-• Identificar colunas categóricas
-• Verificar se colunas que deveriam ter valores exclusivos (como IDs) realmente têm
-• Entender a cardinalidade (número de valores possíveis) de cada coluna
-
-Colunas com alta cardinalidade (muitos valores únicos) podem requerer abordagens específicas em análises estatísticas e visualizações.
-
-Dica: Uma coluna com apenas um valor único não contribui com informação para análises e pode potencialmente ser removida, dependendo do contexto.
-""",
-                "imagem": None
-            },
-            "Contagem por Categoria": {
-                "texto": """A função Contagem por Categoria analisa colunas do tipo texto (object) ou categóricas e mostra a frequência de cada valor único.
-
-Para cada coluna categórica, esta função exibe:
-• Lista de todos os valores únicos
-• Contagem de ocorrências de cada valor
-• Ordem decrescente por frequência
-
-Isso é especialmente útil para:
-• Entender a distribuição de categorias nos seus dados
-• Identificar valores raros ou outliers categóricos
-• Verificar o balanceamento de classes (importante para modelos de classificação)
-
-Se não houver colunas categóricas no conjunto de dados, uma mensagem "Nenhuma coluna categórica encontrada" será exibida.
-
-Dica: Para categorias com muitos valores únicos, considere agrupar valores menos frequentes em uma categoria "Outros" para simplificar análises subsequentes.
-""",
-                "imagem": None
-            },
-            "Exportar Análise": {
-                "texto": """A função Exportar Análise permite salvar seu conjunto de dados atual em um arquivo externo para uso posterior ou compartilhamento.
-
-Formatos suportados:
-• CSV (Comma Separated Values): Formato de texto universal que pode ser aberto em qualquer programa de planilha ou editor de texto.
-• Excel (.xlsx): Formato nativo do Microsoft Excel, mantém formatação e pode conter múltiplas planilhas.
-
-Ao clicar nesta opção:
-1. Uma janela de diálogo será aberta para escolher o local e nome do arquivo
-2. Você poderá selecionar o formato desejado
-3. O arquivo será salvo com todas as modificações e transformações aplicadas aos dados durante a análise
-
-Dica: O formato CSV é mais compatível com diferentes sistemas e ferramentas, enquanto o Excel é melhor se você precisa manter formatação complexa ou planeja trabalhar exclusivamente no Excel.
-""",
-                "imagem": None
-            }
-        }
-
+        self.help_content = help_content
+        self.log_message = log_message  # Armazena a mensagem de log, se fornecida
     def _create_widgets(self):
         """Cria os widgets de análise com layout responsivo."""
         # Cabeçalho
@@ -330,20 +93,63 @@ Dica: O formato CSV é mais compatível com diferentes sistemas e ferramentas, e
 
     # Os demais métodos (show_summary, show_duplicates, etc.) permanecem inalterados
     def show_summary(self):
-        """Exibe um resumo estatístico dos dados."""
+        """Exibe um resumo estatístico dos dados, com verificação de erros e validação do DataFrame."""
         try:
+            # Verifica se o DataFrame não está vazio
+            if self.df.empty:
+                self.update_text_area("O DataFrame está vazio. Não é possível gerar um resumo.")
+                return
+
+            # Verifica se self.df é um DataFrame
+            if not isinstance(self.df, pd.DataFrame):
+                self.update_text_area("O objeto não é um DataFrame válido.")
+                return
+
+            # Gera o resumo estatístico com 'include="all"' para incluir todos os tipos de colunas
             summary = self.df.describe(include="all").to_string()
+
+            # Verifica o tamanho do resumo e decide se deve mostrar a versão inteira ou um resumo parcial
+            if len(summary) > 5000:  # Ajuste o tamanho conforme necessário
+                self.update_text_area("Resumo muito grande. Exibindo apenas uma parte.")
+                summary = self.df.describe(include="all").head(10).to_string()  # Exibe as primeiras linhas
+
+            # Atualiza a área de texto com o resumo gerado
             self.update_text_area(summary)
+
         except Exception as e:
-            self.handle_error("Erro ao gerar resumo estatístico", e)
+            # Exibe erro detalhado caso algo falhe
+            self.handle_error(f"Erro ao gerar resumo estatístico: {str(e)}", e)
+
 
     def show_duplicates(self):
-        """Exibe registros duplicados."""
+        """Exibe todos os registros duplicados no DataFrame, se houver."""
         try:
+            # Primeiro, tenta encontrar registros duplicados, mantendo todos (keep=False)
             duplicates = self.df[self.df.duplicated(keep=False)]
-            self.update_text_area(duplicates.to_string() if not duplicates.empty else "Nenhum registro duplicado encontrado.")
+            
+            if not duplicates.empty:
+                # Exibe duplicatas encontradas
+                self.update_text_area(duplicates.to_string())
+            else:
+                # Se não encontrar duplicatas, tenta outra abordagem: agrupar por todas as colunas
+                duplicates = self.df.groupby(list(self.df.columns)).filter(lambda x: len(x) > 1)
+                if not duplicates.empty:
+                    self.update_text_area(duplicates.to_string())
+                else:
+                    # Caso não haja duplicatas em colunas específicas, verifica por contagem de ocorrências
+                    counts = self.df.value_counts()
+                    duplicates = self.df.loc[counts[counts > 1].index]
+
+                    if not duplicates.empty:
+                        self.update_text_area(duplicates.to_string())
+                    else:
+                        # Nenhum registro duplicado encontrado
+                        self.update_text_area("Nenhum registro duplicado encontrado.")
+                
         except Exception as e:
-            self.handle_error("Erro ao verificar duplicatas", e)
+            # Exibe erro mais detalhado caso a verificação falhe
+            self.handle_error(f"Erro ao verificar duplicatas: {str(e)}", e)
+
 
     def show_malformed_records(self):
         """Exibe registros com valores nulos ou mal formados."""
@@ -356,18 +162,67 @@ Dica: O formato CSV é mais compatível com diferentes sistemas e ferramentas, e
             self.handle_error("Erro ao verificar registros mal formados", e)
 
     def show_data_types(self):
-        """Exibe os tipos de dados de cada coluna."""
+        """Exibe os tipos de dados de cada coluna, com validações e tratamento de erros."""
         try:
-            self.update_text_area(self.df.dtypes.to_string())
+            # Verifica se o DataFrame não está vazio
+            if self.df.empty:
+                self.update_text_area("O DataFrame está vazio. Não é possível exibir os tipos de dados.")
+                return
+
+            # Verifica se self.df é um DataFrame
+            if not isinstance(self.df, pd.DataFrame):
+                self.update_text_area("O objeto não é um DataFrame válido.")
+                return
+
+            # Obtém os tipos de dados e os formata de forma legível
+            data_types = self.df.dtypes.to_string()
+
+            # Verifica o tamanho dos tipos de dados para não sobrecarregar a interface
+            if len(data_types) > 5000:  # Ajuste o tamanho conforme necessário
+                self.update_text_area("Tipos de dados muito grandes para exibição completa. Exibindo um resumo.")
+                data_types = self.df.dtypes.head(10).to_string()  # Exibe as primeiras linhas
+
+            # Atualiza a área de texto com os tipos de dados
+            self.update_text_area(data_types)
+
         except Exception as e:
-            self.handle_error("Erro ao mostrar tipos de dados", e)
+            # Exibe erro detalhado caso algo falhe
+            self.handle_error(f"Erro ao mostrar tipos de dados: {str(e)}", e)
+
 
     def show_unique_values(self):
-        """Exibe a contagem de valores únicos em cada coluna."""
+        """Exibe a contagem de valores únicos em cada coluna do DataFrame."""
         try:
-            self.update_text_area(self.df.nunique().to_string())
+            # Verifica se o DataFrame não está vazio
+            if self.df.empty:
+                self.update_text_area("O DataFrame está vazio. Não é possível exibir valores únicos.")
+                return
+
+            # Verifica se self.df é um DataFrame
+            if not isinstance(self.df, pd.DataFrame):
+                self.update_text_area("O objeto não é um DataFrame válido.")
+                return
+
+            # Contabiliza os valores únicos em cada coluna
+            unique_counts = self.df.nunique()
+
+            # Verifica se o número de valores únicos é grande demais para exibição
+            if len(unique_counts) > 50:  # Ajuste o limite conforme necessário
+                self.update_text_area("Muitas colunas para exibir os valores únicos. Exibindo um resumo.")
+                unique_counts = unique_counts.head(10)  # Exibe as primeiras 10 colunas, pode ajustar o número
+
+            # Se não houver valores únicos, exibe mensagem apropriada
+            if unique_counts.empty:
+                self.update_text_area("Não há valores únicos para exibir.")
+                return
+
+            # Exibe a contagem de valores únicos
+            self.update_text_area(unique_counts.to_string())
+
         except Exception as e:
-            self.handle_error("Erro ao contabilizar valores únicos", e)
+            # Exibe erro detalhado caso algo falhe
+            self.handle_error(f"Erro ao contabilizar valores únicos: {str(e)}", e)
+
 
     def show_category_counts(self):
         """Exibe a contagem de valores únicos para colunas categóricas."""
@@ -384,45 +239,41 @@ Dica: O formato CSV é mais compatível com diferentes sistemas e ferramentas, e
     def export_analysis(self):
         """Exporta a análise para um arquivo CSV ou Excel."""
         filetypes = [("CSV Files", "*.csv"), ("Excel Files", "*.xlsx")]
+        
+        # Solicita ao usuário o caminho para salvar o arquivo
         file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=filetypes)
-
+        
+        # Verifica se o caminho do arquivo foi fornecido
         if not file_path:
+            messagebox.showwarning("Nenhum arquivo selecionado", "Nenhum arquivo foi selecionado para exportação.")
+            return
+        
+        # Verifica se o DataFrame está vazio
+        if self.df.empty:
+            messagebox.showwarning("DataFrame Vazio", "O DataFrame está vazio e não pode ser exportado.")
             return
 
         try:
+            # Exporta para CSV ou Excel com base na extensão do arquivo selecionado
             if file_path.endswith(".csv"):
                 self.df.to_csv(file_path, index=False)
-            else:
+            elif file_path.endswith(".xlsx"):
                 self.df.to_excel(file_path, index=False)
-            messagebox.showinfo("Exportação Concluída", f"Arquivo salvo em:\n{file_path}")
+            else:
+                raise ValueError("Formato de arquivo não suportado. Apenas .csv e .xlsx são permitidos.")
+
+            # Mensagem de sucesso após a exportação
+            messagebox.showinfo("Exportação Concluída", f"Arquivo salvo com sucesso em:\n{file_path}")
+        
         except Exception as e:
-            self.handle_error("Erro ao exportar", e)
+            # Captura e exibe qualquer erro ocorrido durante o processo de exportação
+            error_message = f"Erro ao exportar o arquivo. Detalhes: {str(e)}"
+            self.handle_error("Erro ao exportar", error_message)
+            messagebox.showerror("Erro na Exportação", error_message)
+
             
     def handle_error(self, title, error):
         """Gerencia erros de forma centralizada."""
         messagebox.showerror(title, f"Erro: {str(error)}")
         self.update_text_area(f"Ocorreu um erro: {str(error)}")
-
-# Exemplo de uso
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Demonstração da Janela de Ajuda")
-    root.geometry("1000x600")
-    
-    # Criar um DataFrame de exemplo
-    import pandas as pd
-    import numpy as np
-    
-    data = {
-        'Nome': ['João', 'Maria', 'Pedro', 'Ana', 'Carlos'],
-        'Idade': [25, 30, 22, 28, 35],
-        'Salário': [3500, 4200, 2800, 3900, 5000],
-        'Departamento': ['TI', 'RH', 'Marketing', 'TI', 'Financeiro']
-    }
-    df = pd.DataFrame(data)
-    
-    # Adicionar a frame de análise
-    frame = AnalysisFrame(root, df)
-    frame.pack(fill="both", expand=True, padx=10, pady=10)
-    
-    root.mainloop()
+        self.log_message(f"Erro: {str(error)}", "error")  # Loga a mensagem de erro, se fornecida

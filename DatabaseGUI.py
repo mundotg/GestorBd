@@ -1,4 +1,4 @@
-import gc
+
 import tkinter as tk
 from tkinter import ttk
 from components.status_bar import StatusBar
@@ -90,4 +90,3 @@ class DataAnalysisGUI:
 
         # Destruir a janela principal
         self.root.destroy() 
-        gc.collect()

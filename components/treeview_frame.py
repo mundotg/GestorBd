@@ -94,7 +94,7 @@ class TreeViewFrame(ttk.Frame):
             if item_id:
                 try:
                     index = self.tree.index(item_id)  # Obtém o índice no TreeView
-                    self.log_message(self, f"Duplo clique detectado. ID: {item_id}, Índice no TreeView: {index}")
+                    self.log_message(f"Duplo clique detectado. ID: {item_id}, Índice no TreeView: {index} class:TreeViewFrame")
                     self.show_edit_modal(index,self._fechar_modal)  # Passa o índice correto
                     # self.modal_aberto = True
                 except Exception as e:

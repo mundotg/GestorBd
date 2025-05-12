@@ -3,15 +3,19 @@ from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 from sqlalchemy import inspect
 import threading
+from components.AdvancedDataAnalyzerFrame import AdvancedDataAnalyzerFrame
+from const.const_import import output
 
 class AnalysisFrame(ttk.Frame):
-    def __init__(self, master, df: pd.DataFrame, engine,table_name,query_executed):
+    def __init__(self, master, df: pd.DataFrame, engine,table_name,query_executed,log_message=None):
         super().__init__(master)
         self.df = df
         self.table_name = table_name
         self.engine = engine
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
+        self.log_message = log_message
+        self.query_executed = query_executed
         self._create_widgets()
 
     def _create_widgets(self):
@@ -42,7 +46,18 @@ class AnalysisFrame(ttk.Frame):
         ttk.Button(btn_frame, text="Duplicados", command=self.show_duplicates).grid(row=0, column=3, sticky="ew", padx=5)
         ttk.Button(btn_frame, text="Exportar Excel", command=self.export_to_excel).grid(row=0, column=4, sticky="ew", padx=5)
         ttk.Button(btn_frame, text="Resumo Estatístico", command=self.show_summary).grid(row=0, column=5, sticky="ew", padx=5)
-        
+        ttk.Button(btn_frame, text="Valores Únicos", command=self.show_unique_values).grid(row=0, column=6, sticky="ew", padx=5)
+        ttk.Button(btn_frame, text="modo avançado", command=self.modo_advancado).grid(row=0, column=7, sticky="ew", padx=5)
+    def modo_advancado(self):
+        root = tk.Tk()
+        root.title("Analisador de Dados Avançado")
+        root.geometry("800x600")
+        # Criando e adicionando o frame à janela
+        analyzer = AdvancedDataAnalyzerFrame(root, self.df,self.log_message)
+        analyzer.pack(fill="both", expand=True)
+
+        # Iniciando o loop da interface
+        root.mainloop()
     def cancel_analysis(self):
         self._stop_thread = True
         self.progress_bar.stop()
@@ -53,30 +68,13 @@ class AnalysisFrame(ttk.Frame):
         self.progress_bar.start()
         threading.Thread(target=self.process_malformed, daemon=True).start()
     
+    
     def show_summary(self):
         try:
             # Gera o resumo estatístico
             summary_df = self.df.describe(include="all")
 
             # Começa a compor o texto de saída com explicações
-            output = [
-                "📈 **Resumo Estatístico da Tabela:**\n",
-                "Este resumo fornece uma visão geral das colunas, incluindo contagens, valores únicos, médias, desvios padrão e outras estatísticas importantes.\n",
-                "Legenda das Métricas:\n",
-                "• count — Quantidade de registros não nulos (preenchidos)\n"
-                "• unique — Número de valores únicos (somente para colunas categóricas)\n"
-                "• top — Valor mais frequente (moda)\n"
-                "• freq — Quantidade de vezes que o valor mais frequente aparece\n"
-                "• mean — Média (somente para colunas numéricas)\n"
-                "• std — Desvio padrão (dispersão dos dados)\n"
-                "• min — Valor mínimo\n"
-                "• 25% — Primeiro quartil (25% dos dados abaixo desse valor)\n"
-                "• 50% — Mediana (metade dos dados abaixo/acima)\n"
-                "• 75% — Terceiro quartil (75% dos dados abaixo desse valor)\n"
-                "• max — Valor máximo\n\n",
-                "📊 Estatísticas por Coluna:\n"
-            ]
-
             output.append(summary_df.to_string())
 
             self.update_text_area("\n".join(output))
@@ -92,26 +90,72 @@ class AnalysisFrame(ttk.Frame):
         self.text_area.see("1.0")
 
     def show_data_types(self):
+        """Exibe os tipos de dados e metainformações das colunas da(s) tabela(s)."""
         try:
             inspector = inspect(self.engine)
-            columns = inspector.get_columns(self.table_name)
+            # Garante que sempre estamos lidando com uma lista
+            table_names = self.table_name if isinstance(self.table_name, list) else [self.table_name]
 
-            if not columns:
-                self.update_text_area("❌ Nenhuma coluna encontrada na tabela.")
-                return
+            all_lines = []
 
-            text = "📊 Tipos de Dados:\n\n"
-            for col in columns:
-                name = col["name"]
-                col_type = str(col["type"])
-                text += f"• {name}: {col_type}\n"
+            for table in table_names:
+                columns = inspector.get_columns(table)
 
-            self.update_text_area(text)
+                if not columns:
+                    all_lines.append(f"❌ Nenhuma coluna encontrada na tabela {table}.")
+                    continue
+
+                self.column_types = {}
+                self.primary_key_column = None
+
+                linhas = [f"📊 Estrutura da Tabela: {table}\n"]
+
+                for col in columns:
+                    name = col.get("name", "—")
+                    raw_type = col.get("type", "—")
+                    col_type = str(raw_type)
+                    nullable = "Sim" if col.get("nullable", True) else "Não"
+                    default = col.get("default", "—")
+                    is_primary = col.get("primary_key", False)
+                    autoincrement = "Sim" if col.get("autoincrement", False) else "Não"
+                    comment = col.get("comment", None)
+
+                    length = getattr(raw_type, "length", None)
+                    precision = getattr(raw_type, "precision", None)
+                    scale = getattr(raw_type, "scale", None)
+
+                    if length:
+                        col_type += f"({length})"
+                    elif precision is not None and scale is not None:
+                        col_type += f"({precision},{scale})"
+
+                    self.column_types[name] = col_type
+
+                    if is_primary:
+                        self.primary_key_column = name
+
+                    linhas.append(
+                        f"{'🔑' if is_primary else '•'} {name}: {col_type}\n"
+                        f"    ├─ Pode ser nulo: {nullable}\n"
+                        f"    ├─ Valor padrão: {default}\n"
+                        f"    ├─ Autoincremento: {autoincrement}"
+                        + (f"\n    └─ Comentário: {comment}" if comment else "\n")
+                    )
+
+                all_lines.extend(linhas)
+
+            self.update_text_area("\n".join(all_lines))
+
         except Exception as e:
             self.handle_error("Erro ao verificar tipos de dados", e)
 
+
     def show_table_relations(self):
         try:
+            if not isinstance(self.table_name, str) or any(kw in self.table_name.upper() for kw in ["SELECT", "JOIN", "FROM", "WHERE"]):
+                self.update_text_area("⚠️ Relações não podem ser extraídas de consultas compostas. Forneça o nome de uma tabela real.")
+                return
+
             inspector = inspect(self.engine)
             foreign_keys = inspector.get_foreign_keys(self.table_name)
             result = []
@@ -141,85 +185,92 @@ class AnalysisFrame(ttk.Frame):
             self.handle_error("Erro ao verificar relações da tabela", e)
 
 
+    def show_unique_values(self):
+        """Exibe a contagem de valores únicos em cada coluna do DataFrame."""
+        try:
+            # Verifica se o DataFrame não está vazio
+            if self.df.empty:
+                self.update_text_area("O DataFrame está vazio. Não é possível exibir valores únicos.")
+                return
 
-    # def show_malformed(self):
-    #     try:
-    #         # Verifica valores nulos
-    #         null_summary = self.df.isnull().sum()
+            # Verifica se self.df é um DataFrame
+            if not isinstance(self.df, pd.DataFrame):
+                self.update_text_area("O objeto não é um DataFrame válido.")
+                return
 
-    #         # Verifica strings vazias (apenas em colunas do tipo objeto/string)
-    #         empty_summary = self.df.select_dtypes(include="object").apply(
-    #             lambda c: (c.astype(str).str.strip() == "")
-    #         ).sum()
+            # Contabiliza os valores únicos em cada coluna
+            unique_counts = self.df.nunique()
 
-    #         # Monta resumo de colunas com dados malformados
-    #         output = ["📉 Resumo de Colunas com Valores Nulos ou Vazios:\n"]
-    #         for col in self.df.columns:
-    #             total_null = null_summary[col]
-    #             total_empty = empty_summary.get(col, 0)
-    #             if total_null > 0 or total_empty > 0:
-    #                 output.append(f"• {col}: {total_null} nulos, {total_empty} vazios")
+            # Verifica se o número de valores únicos é grande demais para exibição
+            if len(unique_counts) > 50:  # Ajuste o limite conforme necessário
+                self.update_text_area("Muitas colunas para exibir os valores únicos. Exibindo um resumo.")
+                unique_counts = unique_counts.head(10)  # Exibe as primeiras 10 colunas, pode ajustar o número
 
-    #         # Filtra linhas malformadas
-    #         is_null = self.df.isnull().any(axis=1)
-    #         is_empty = self.df.select_dtypes(include="object").apply(
-    #             lambda c: c.astype(str).str.strip() == ""
-    #         ).any(axis=1)
-    #         malformed = self.df[is_null | is_empty]
+            # Se não houver valores únicos, exibe mensagem apropriada
+            if unique_counts.empty:
+                self.update_text_area("Não há valores únicos para exibir.")
+                return
 
-    #         if not malformed.empty:
-    #             output.append("\n🧪 Registros Mal Formados:\n")
-    #             output.append(malformed.to_string(index=False))
+            # Exibe a contagem de valores únicos
+            self.update_text_area(unique_counts.to_string())
 
-    #             # Pergunta se deseja exportar
-    #             save = messagebox.askyesno("Exportar?", "Deseja exportar os registros mal formados para Excel?")
-    #             if save:
-    #                 file_path = filedialog.asksaveasfilename(
-    #                     defaultextension=".xlsx",
-    #                     filetypes=[("Excel Files", "*.xlsx")],
-    #                     title="Salvar Registros Mal Formados"
-    #                 )
-    #                 if file_path:
-    #                     malformed.to_excel(file_path, index=False)
-    #                     messagebox.showinfo("Exportação", f"Arquivo salvo com sucesso:\n{file_path}")
-    #         else:
-    #             output.append("\n✅ Nenhum registro mal formado encontrado.")
-
-    #         self.update_text_area("\n".join(output))
-    #     except Exception as e:
-    #         self.handle_error("Erro ao verificar registros mal formados", e)
-
+        except Exception as e:
+            # Exibe erro detalhado caso algo falhe
+            self.handle_error(f"Erro ao contabilizar valores únicos: {str(e)}", e)
 
     def show_duplicates(self):
+        """Exibe registros duplicados com análise detalhada e permite exportação."""
         try:
             if self.df.empty:
                 self.update_text_area("❌ O DataFrame está vazio.")
                 return
 
+            # Identifica todos os registros duplicados (inclusive originais)
             duplicated = self.df[self.df.duplicated(keep=False)]
 
             if duplicated.empty:
                 self.update_text_area("✅ Nenhum registro duplicado encontrado.")
                 return
 
-            output = [f"⚠️ {len(duplicated)} registros duplicados encontrados:\n"]
+            output = []
+            total_dups = len(duplicated)
+            output.append(f"⚠️ {total_dups} registros duplicados encontrados (incluindo entradas originais):\n")
 
-            # Mostrar os duplicados agrupados
+            # Agrupamento por todas as colunas
             grouped = duplicated.groupby(list(self.df.columns)).size().reset_index(name='Ocorrências')
             output.append("📌 Registros Duplicados Agrupados:\n")
             output.append(grouped.to_string(index=False))
             output.append("")
 
-            # Verificar colunas que causam duplicatas
-            output.append("🔍 Colunas com maior contribuição para duplicações:\n")
+            # Colunas que mais causam duplicação
+            output.append("🔍 Colunas com maior impacto nas duplicações:\n")
+            contribs = []
             for col in self.df.columns:
                 dup_col = self.df[self.df.duplicated(subset=[col], keep=False)]
                 if not dup_col.empty:
-                    output.append(f"• {col} → {len(dup_col)} registros duplicados por essa coluna")
+                    contribs.append((col, len(dup_col)))
+
+            contribs = sorted(contribs, key=lambda x: x[1], reverse=True)
+            for col, count in contribs:
+                output.append(f"• {col}: {count} registros duplicados com base apenas nesta coluna")
 
             self.update_text_area("\n".join(output))
+
+            # Exportação opcional
+            salvar = messagebox.askyesno("Exportar Duplicatas", "Deseja exportar os registros duplicados encontrados?")
+            if salvar:
+                filetypes = [("CSV Files", "*.csv"), ("Excel Files", "*.xlsx")]
+                file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=filetypes)
+                if file_path:
+                    if file_path.endswith(".csv"):
+                        duplicated.to_csv(file_path, index=False)
+                    else:
+                        duplicated.to_excel(file_path, index=False)
+                    messagebox.showinfo("Exportação Concluída", f"Registros duplicados exportados para:\n{file_path}")
+
         except Exception as e:
             self.handle_error("Erro ao verificar duplicatas", e)
+
     
     def process_malformed(self):
         try:
@@ -275,7 +326,7 @@ class AnalysisFrame(ttk.Frame):
 
     def handle_error(self, title, error):
         messagebox.showerror(title, str(error))
-
+        self.log_message(f" {error}",level="error")
 
     def export_to_excel(self):
         try:
@@ -291,5 +342,3 @@ class AnalysisFrame(ttk.Frame):
         except Exception as e:
             self.handle_error("Erro ao exportar", e)
 
-    def handle_error(self, title, error):
-        messagebox.showerror(title, str(error))

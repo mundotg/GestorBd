@@ -10,3 +10,5 @@
 9 - fazer operação nas consulta.
 10 - navegar entre tabelas.
 11 - problema de termino da busca.
+12 - erro ao visualizar os dados das consultas.
+13 - quando a internet estiver lenta 

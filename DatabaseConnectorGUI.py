@@ -1,11 +1,10 @@
+import sys
 import threading
 import tkinter as tk
 from tkinter import ttk
-import traceback
-from DatabaseManager import DatabaseManager
 from config.ConfigManager import ConfigManager
 from Theme import Theme
-from utils.gui_principal import _connect_thread, _update_connection_status, delete_profile, disconnect, load_profile, log_message, new_profile, save_profile, test_connection, update_port, validate_connection_fields
+from utils.gui_principal import _connect_thread, delete_profile, disconnect, load_profile, log_message, new_profile, save_profile, test_connection, update_port, validate_connection_fields
 
 class DatabaseConnectorGUI:
     """Interface gráfica para conexão com banco de dados."""
@@ -226,6 +225,7 @@ class DatabaseConnectorGUI:
         """Fecha o aplicativo."""
         self.root.quit()
         self.root.destroy()
+        sys.exit()
 
 
     def open_gui_gestaodb(self):
@@ -278,6 +278,7 @@ class DatabaseConnectorGUI:
 
             #db_gui.root.protocol("WM_DELETE_WINDOW", self.Quit)
             new_root.mainloop()  # Mantém a nova janela ativa
+            db_gui.focus_set()
 
         except Exception as e:
             import traceback

@@ -40,3 +40,6 @@ reset:
 	@echo "✅ Ambiente virtual removido!"
 freeze:
 	@pip freeze > requirements.txt
+
+execute: 
+	@pyinstaller --onefile --noconsole --hidden-import=pyodbc --hidden-import=sqlalchemy main.py 

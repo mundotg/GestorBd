@@ -2,15 +2,14 @@ import gc
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Any, Callable, Optional, Dict, Union, List, TypedDict
 import traceback
-
+from datetime import datetime
 from components.CheckboxWithEntry import CheckboxWithEntry
-from components.Data_wiget2 import DateTimeEntry
-from components.DataWidget import DatabaseDateWidget
-from utils.validarText import  _convert_column_type_for_string, _map_column_type, get_valor_idependente_entry, quote_identifier, validar_numero, _is_system_field, validar_numero_float
+from utils.metodoGui import _add_placeholder
+from utils.validarText import  _convert_column_type_for_string, _map_column_type, get_valor_idependente_entry, quote_identifier, validar_numero, _is_system_field
 
 class ColumnInfo(TypedDict):
     name: str
@@ -30,7 +29,7 @@ class CreateModal(tk.Toplevel):
         self.table_name = table_name
         self.on_data_change = on_data_change
         self.db_type = db_type.lower()
-        self.field_entries: Dict[str, Union[ttk.Entry, ttk.Combobox, tk.BooleanVar, DatabaseDateWidget, tk.Text]] = {}
+        self.field_entries: Dict[str, Union[ttk.Entry, ttk.Combobox, tk.BooleanVar, tk.Text]] = {}
         self.enum_values = enum_values 
         self.column_info = columns 
         self.df = df
@@ -208,7 +207,6 @@ class CreateModal(tk.Toplevel):
                 no_data = False
                 valor= False
                 if default_value is not None and default_value != "" or not nullable:
-                    print("default_value: ",default_value)
                     valor= default_value
                 # var = tk.BooleanVar(value=False)
                 entry = CheckboxWithEntry(self.fields_frame,entry_value=valor)
@@ -218,11 +216,9 @@ class CreateModal(tk.Toplevel):
             elif "date" in col_type or "datetime" in col_type or "timestamp" in col_type  or "time" in col_type:
                 try:
                     
-                    entry = DateTimeEntry(self.fields_frame,col_type)
-                    entry.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=3)
-                    if default_value is not None and default_value != "" or not nullable:
-                        entry.set_default_value()
-                    widget = entry.entry
+                    self.after(10, lambda cn=col_name, ct=col_type: self._create_date_widget(
+                    self.fields_frame, cn, ct, str_value,row,1
+                ))
                     no_data = False
                 except Exception as e:
                     self.log_message(f"Erro criando widget de data:{e} {traceback.format_exc()}", level="error")
@@ -249,6 +245,49 @@ class CreateModal(tk.Toplevel):
                 fallback.insert(0, str(default_value))
             fallback.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=3)
             self.field_entries[col_name] = fallback
+    def _create_date_widget(self, parent, col_name, col_type, value,row, column):
+        """Cria um widget para visualizar/editar campos de data, mesmo com valores vazios ou nulos"""
+        try:
+            format_map = {
+                "datetime": ("%Y-%m-%d %H:%M:%S", "AAAA-MM-DD HH:MM:SS"),
+                "timestamp": ("%Y-%m-%d %H:%M:%S", "AAAA-MM-DD HH:MM:SS"),
+                "date": ("%Y-%m-%d", "AAAA-MM-DD"),
+                "time": ("%H:%M:%S", "HH:MM:SS"),
+                "year": ("%Y", "AAAA"),
+                "month": ("%m", "MM"),
+                "day": ("%d", "DD"),
+            }
+
+            date_format, format_text = "%Y-%m-%d", "AAAA-MM-DD"
+            for tipo, (fmt, label_fmt) in format_map.items():
+                if tipo in col_type.lower():
+                    date_format, format_text = fmt, label_fmt
+                    break
+
+            frame = tk.LabelFrame(parent, bd=1, relief=tk.SOLID, bg="#f0f0f0", text=format_text)
+            frame.grid(row=row, column=column, sticky=tk.EW, padx=5, pady=3)
+
+            entry = tk.Entry(frame, width=30, font=("Arial", 10), bd=0, bg="white")
+            entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            example_text = datetime.now().strftime(date_format)
+            _add_placeholder(entry, example_text,tk)
+
+            if value:
+                try:
+                    # print(f"Valor de {col_name} antes de formatar: {value} ({type(value).__name__})")
+                    if isinstance(value, datetime):
+                        entry.insert(0, value.strftime(date_format))
+                    else:
+                        entry.insert(0, str(value).strip())
+                except Exception:
+                    self.log_message(f"Erro ao formatar data: {value} ({type(value).__name__})", level="error")
+                    entry.insert(0, "")
+
+            self.field_entries[col_name] = entry
+            self.linha_select_df[col_name] = lambda: entry.get().strip()
+
+        except Exception as e:
+            self.log_message(f"Erro criando widget de data: {e} ({type(e).__name__})\n{traceback.format_exc()}", level="error")
 
     def _validate_fields(self):
         """Validate that all required fields have values."""
@@ -277,8 +316,6 @@ class CreateModal(tk.Toplevel):
                 widget.set(False)
             elif isinstance(widget, tk.Text):
                 widget.delete("1.0", tk.END)
-            elif isinstance(widget, DatabaseDateWidget):
-                widget.clear()
             elif isinstance(widget, ttk.Combobox):
                 if widget['values']:
                     widget.set(widget['values'][0])

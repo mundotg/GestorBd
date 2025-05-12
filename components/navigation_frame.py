@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import TclError, ttk, messagebox
-from typing import Any, Callable, Optional, Union
+from tkinter import ttk, messagebox
+from typing import Any, Callable, Optional
 import pandas as pd
 from sqlalchemy import inspect
 
@@ -31,29 +31,48 @@ class NavigationFrame(ttk.Frame):
         self._create_widgets()
     
     def _create_widgets(self):
-        """Creates navigation buttons with validation."""
-        self.total_label = ttk.LabelFrame(self,text=f"total de registro nº {len(self.df) if self.df is not None else 0}")
-        self.prev_button = ttk.Button(self.total_label, text='⬅️anterior', command=self._validate_prev_page, style="DataTable.TButton")
-        self.prev_button.pack(side=tk.LEFT, padx=5)
-        
-        self.page_label = ttk.Label(self.total_label, text="📄Pag 1 of 1", font=("Arial", 10))
-        self.page_label.pack(side=tk.LEFT, padx=5)
-        
-        self.next_button = ttk.Button(self.total_label, text='➡️proximo', command=self._validate_next_page, style="DataTable.TButton")
-        self.next_button.pack(side=tk.LEFT, padx=5)
-        
-        self.refresh_button = ttk.Button(self.total_label, text='🔄refrescar', command=self.update_table, style="DataTable.TButton")
-        self.refresh_button.pack(side=tk.RIGHT, padx=5)
-        self.total_label.pack(side=tk.LEFT,fill=tk.X, pady=5)
-        
-        self.gestao_label = ttk.LabelFrame(self,text=f"__________ gestão de tabela________")
-        # Botão para ver registros mal formados
+        """Cria botões de navegação e gestão com layout responsivo."""
+
+        # Frame principal de controle
+        control_frame = ttk.Frame(self)
+        control_frame.pack(fill=tk.X, pady=5)
+
+        # Frame de navegação
+        self.total_label = ttk.LabelFrame(control_frame, text=f"Total de registros nº {len(self.df) if self.df is not None else 0}")
+        self.total_label.grid(row=0, column=0, sticky="ew", padx=5)
+
+        self.total_label.columnconfigure((0, 1, 2, 3), weight=1)
+
+        self.prev_button = ttk.Button(self.total_label, text='⬅️ Anterior', command=self._validate_prev_page, style="DataTable.TButton")
+        self.prev_button.grid(row=0, column=0, padx=5, sticky="ew")
+
+        self.page_label = ttk.Label(self.total_label, text="📄 Pág 1 de 1", font=("Arial", 10))
+        self.page_label.grid(row=0, column=1, padx=5, sticky="ew")
+
+        self.next_button = ttk.Button(self.total_label, text='➡️ Próximo', command=self._validate_next_page, style="DataTable.TButton")
+        self.next_button.grid(row=0, column=2, padx=5, sticky="ew")
+
+        self.refresh_button = ttk.Button(self.total_label, text='🔄 Refrescar', command=self.update_table, style="DataTable.TButton")
+        self.refresh_button.grid(row=0, column=3, padx=5, sticky="ew")
+
+        # Frame de gestão
+        self.gestao_label = ttk.LabelFrame(control_frame, text="__________ Gestão de Tabela ________")
+        self.gestao_label.grid(row=0, column=1, sticky="ew", padx=5)
+
+        self.gestao_label.columnconfigure((0, 1), weight=1)
+
         state_value = 'normal' if self.edited else 'disabled'
-        self.invalid_button = ttk.Button(self.gestao_label, text="criar novo registro", command=self.cria_registro, style="DataTable.TButton",state=state_value)
-        self.invalid_button.pack(side=tk.RIGHT, padx=5)
+
         self.analysis_button = ttk.Button(self.gestao_label, text="Analisar Tabela", command=self.open_analysis)
-        self.analysis_button.pack(side=tk.RIGHT,padx=5)
-        self.gestao_label.pack(side=tk.RIGHT,fill=tk.X, pady=5)
+        self.analysis_button.grid(row=0, column=0, padx=5, sticky="ew")
+
+        self.invalid_button = ttk.Button(self.gestao_label, text="Criar novo registro", command=self.cria_registro, style="DataTable.TButton", state=state_value)
+        self.invalid_button.grid(row=0, column=1, padx=5, sticky="ew")
+
+        # Ajustar redimensionamento
+        control_frame.columnconfigure(0, weight=1)
+        control_frame.columnconfigure(1, weight=1)
+
  
 
     def cria_registro(self):
@@ -80,6 +99,7 @@ class NavigationFrame(ttk.Frame):
             return
 
         # Cria a modal para inserção de registro
+       
         CreateModal( master=self,engine=self.engine, table_name=self.table_name, on_data_change=self.on_data_change, db_type=self.db_type,
                     df=self.df, column_name_key=campo_primary_key, 
                     enum_values=self.enum_values, log_message=self.log_message, columns=self.columns, databse_name=self.databse_name)
@@ -87,7 +107,7 @@ class NavigationFrame(ttk.Frame):
     def open_analysis(self):
         analysis_window = tk.Toplevel()
         analysis_window.title("Análise Detalhada")
-        analysis_frame = AnalysisFrame(analysis_window, self.df,self.engine,self.table_name,self.query_executed)
+        analysis_frame = AnalysisFrame(analysis_window, self.df,self.engine,self.table_name,self.query_executed,self.log_message)
         analysis_frame.pack(fill=tk.BOTH, expand=True)
 
     def update_pagination(self, current_page: int, total_pages: int, length: int = None):

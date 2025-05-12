@@ -1,6 +1,5 @@
 import sys
 import tkinter as tk
-from tkinter import messagebox
 import traceback
 from DatabaseConnectorGUI import DatabaseConnectorGUI
 from utils.logger import log_message
